@@ -1,11 +1,8 @@
-Generate schedule · JS
-Copy
-
-import Anthropic from "@anthropic-ai/sdk";
+const Anthropic = require("@anthropic-ai/sdk");
 
 const client = new Anthropic({ apiKey: process.env.VITE_ANTHROPIC_KEY });
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -15,7 +12,6 @@ export default async function handler(req, res) {
   const monthName = new Date(year, month, 1).toLocaleString("default", { month: "long" });
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  // Build context for Claude
   const providerList = providers.map(p =>
     `- ${p.name} (${p.credentials}, no-call day preference: ${p.no_call_day || "none"}, participation: ${p.participation_percent || 100}%)`
   ).join("\n");
@@ -47,10 +43,10 @@ CALL RULES:
 1. Each day needs exactly one provider on call (7AM to 7AM next day)
 2. Maximum 1 call shift per provider every 3 days minimum
 3. Minimum 3 weeks between weekend call shifts for the same provider
-4. Respect all approved time-off requests — never assign a provider on their approved days off
+4. Respect all approved time-off requests
 5. Distribute weekday calls and weekend calls fairly across all providers
-6. MAXIMIZE the gap between each provider's call shifts — spread them out as much as possible rather than just meeting the minimum gap
-7. Balance the total number of calls per provider as evenly as possible given their participation percentage
+6. MAXIMIZE the gap between each provider's call shifts
+7. Balance the total number of calls per provider as evenly as possible
 8. Respect no-call day preferences where possible
 9. Do not assign a provider who had the last call of the previous month to the first day of this month
 
@@ -77,6 +73,13 @@ Respond ONLY with a valid JSON object in this exact format, no explanation, no m
     return res.status(200).json(result);
   } catch (err) {
     console.error("AI schedule error:", err);
-    return res.status(500).json({ error: "Failed to generate schedule" });
+    return res.status(500).json({ error: err.message });
   }
-}
+};
+```
+
+Open `api/generate-schedule.js`, select all with **Cmd+A**, delete, paste this in, save with **Cmd+S**, then push:
+```
+git add .
+git commit -m "fix serverless function syntax"
+git push
