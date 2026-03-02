@@ -60,6 +60,48 @@ export function IcoGear({color}) {
   );
 }
 
+
+export function IcoLock({color}) {
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <rect x={5} y={11} width={14} height={10} rx={2} stroke={color} strokeWidth={2}/>
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke={color} strokeWidth={2} strokeLinecap="round"/>
+      <circle cx={12} cy={16} r={1.5} fill={color}/>
+    </svg>
+  );
+}
+export function IcoClipboard({color}) {
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <rect x={4} y={4} width={16} height={18} rx={2} stroke={color} strokeWidth={2}/>
+      <path d="M9 2h6a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z" stroke={color} strokeWidth={2}/>
+      <line x1={8} y1={11} x2={16} y2={11} stroke={color} strokeWidth={2} strokeLinecap="round"/>
+      <line x1={8} y1={15} x2={13} y2={15} stroke={color} strokeWidth={2} strokeLinecap="round"/>
+    </svg>
+  );
+}
+export function IcoPalm({color}) {
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <path d="M12 22V12" stroke={color} strokeWidth={2} strokeLinecap="round"/>
+      <path d="M12 12c0-4 3-7 6-7-1 3-2 5-6 7z" fill={color} opacity={0.7}/>
+      <path d="M12 12c0-4-3-7-6-7 1 3 2 5 6 7z" fill={color}/>
+      <path d="M12 12c-4 0-7-2-7-5 3 0 5 1 7 5z" fill={color} opacity={0.5}/>
+      <line x1={8} y1={22} x2={16} y2={22} stroke={color} strokeWidth={2} strokeLinecap="round"/>
+    </svg>
+  );
+}
+export function IcoScale({color}) {
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <line x1={12} y1={3} x2={12} y2={21} stroke={color} strokeWidth={2} strokeLinecap="round"/>
+      <line x1={3} y1={21} x2={21} y2={21} stroke={color} strokeWidth={2} strokeLinecap="round"/>
+      <path d="M5 12l-2 6h4l-2-6z" stroke={color} strokeWidth={1.5} strokeLinejoin="round"/>
+      <path d="M19 12l-2 6h4l-2-6z" stroke={color} strokeWidth={1.5} strokeLinejoin="round"/>
+      <line x1={5} y1={12} x2={19} y2={12} stroke={color} strokeWidth={1.5} strokeLinecap="round"/>
+    </svg>
+  );
+}
 export function Avatar({ p, size=40, ring=false }) {
   if (p.avatar_url) {
     return (
@@ -371,18 +413,20 @@ export function RequestPage({ currentProvider }) {
 export function MorePage({ onNav, currentProvider }) {
   const isAdmin = currentProvider?.is_admin;
   const items = [
-    ...(isAdmin ? [["🔐","Admin Panel","admin"]] : []),
-    ["📋","Call Logic","logic"],
-    ["🏖️","Upcoming Vacations","vacations"],
-    ["⚖️","Call Fairness","fairness"],
-    ["⚙️","Settings","settings"],
+    ...(isAdmin ? [[IcoLock,"Admin Panel","admin"]] : []),
+    [IcoClipboard,"Call Logic","logic"],
+    [IcoPalm,"Upcoming Vacations","vacations"],
+    [IcoScale,"Call Fairness","fairness"],
+    [IcoGear,"Settings","settings"],
   ];
   return (
     <div style={{paddingBottom:20}}>
       <p style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text, marginBottom:12}}>More</p>
-      {items.map(([icon,label,key]) => (
+      {items.map(([Icon,label,key]) => (
         <div key={key} onClick={()=>onNav(key)} style={card({padding:"13px 16px", marginBottom:10, display:"flex", alignItems:"center", gap:14, cursor:"pointer"})}>
-          <div style={{width:36, height:36, borderRadius:8, background:C.wave, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0}}>{icon}</div>
+          <div style={{width:36, height:36, borderRadius:8, background:C.wave, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
+            <Icon color={C.teal}/>
+          </div>
           <span style={{fontFamily:ff, fontWeight:700, fontSize:14, color:C.text, flex:1}}>{label}</span>
           <span style={{color:C.greyMid, fontSize:18}}>›</span>
         </div>
