@@ -114,3 +114,35 @@ export async function fetchCurrentProvider(email) {
   if (error) console.error("fetchCurrentProvider:", error);
   return data || null;
 }
+// ─── AI Schedule Generator ────────────────────────────────────────────────────
+export async function generateSchedule({ providers, requests, year, month, previousSchedule }) {
+  const response = await fetch("/api/generate-schedule", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ providers, requests, year, month, previousSchedule }),
+  });
+  if (!response.ok) throw new Error("Failed to generate schedule");
+  return response.json();
+}
+
+export async function saveGeneratedSchedule(scheduleMap, providers) {
+  // scheduleMap is { "2026-11-01": "sarah@beachesobgyn.com", ... }
+  const rows = Object.entries(scheduleMap).map(([date, email]) => {
+    const provider = providers.find(p => p.email === email);
+    return { date, provider_id: provider?.id };
+  }).filter(r => r.provider_id);
+
+  // Delete existing schedule for that month first
+  if (rows.length > 0) {
+    const month = rows[0].date.slice(0, 7); // "2026-11"
+    await supabase
+      .from("call_schedule")
+      .delete()
+      .gte("date", `${month}-01`)
+      .lte("date", `${month}-31`);
+  }
+
+  const { error } = await supabase.from("call_schedule").insert(rows);
+  if (error) console.error("saveGeneratedSchedule:", error);
+  return !error;
+}

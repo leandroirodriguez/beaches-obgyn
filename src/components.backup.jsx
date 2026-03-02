@@ -4,9 +4,9 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule } from "./api";
-import { supabase } from "./supabase";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage } from "./api";
 
+// ─── SVG Icons ────────────────────────────────────────────────────────────────
 export function IcoHome({color}) {
   return (
     <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
@@ -60,6 +60,7 @@ export function IcoGear({color}) {
   );
 }
 
+// ─── Avatar ───────────────────────────────────────────────────────────────────
 export function Avatar({ p, size=40, ring=false }) {
   return (
     <div style={{
@@ -73,6 +74,7 @@ export function Avatar({ p, size=40, ring=false }) {
   );
 }
 
+// ─── Toggle ───────────────────────────────────────────────────────────────────
 export function Toggle({ val, fn }) {
   return (
     <div onClick={() => fn(!val)} style={{
@@ -88,6 +90,7 @@ export function Toggle({ val, fn }) {
   );
 }
 
+// ─── Header ───────────────────────────────────────────────────────────────────
 export function Header({ onNotif, onSettings, logoSrc }) {
   return (
     <div style={{
@@ -115,6 +118,7 @@ export function Header({ onNotif, onSettings, logoSrc }) {
   );
 }
 
+// ─── Next 5 Days Strip ────────────────────────────────────────────────────────
 export function NextStrip({ schedule={} }) {
   const base = new Date(2026,9,15);
   const days = Array.from({length:5}, (_,i) => {
@@ -141,6 +145,7 @@ export function NextStrip({ schedule={} }) {
   );
 }
 
+// ─── Home Page ────────────────────────────────────────────────────────────────
 export function HomePage() {
   const [yr,setYr]             = useState(2026);
   const [mo,setMo]             = useState(9);
@@ -177,11 +182,13 @@ export function HomePage() {
           <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>{MONTHS[mo]} {yr}</span>
           <button onClick={nextMo} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary, padding:"0 8px"}}>›</button>
         </div>
+
         <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", marginBottom:6}}>
           {WD_SHORT.map((w,i) => (
             <div key={w} style={{textAlign:"center", fontFamily:ff, fontWeight:800, fontSize:11, color:i===0||i===6?C.coral:C.teal}}>{w}</div>
           ))}
         </div>
+
         {loading
           ? <div style={{textAlign:"center", padding:"20px", color:C.sub, fontFamily:ff, fontSize:13}}>Loading schedule...</div>
           : <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:"2px 0"}}>
@@ -195,34 +202,49 @@ export function HomePage() {
                     background: s?`${C.teal}15` : t?C.wave : "transparent"
                   }}>
                     <span style={{fontFamily:ff, fontWeight:t||s?900:400, fontSize:13, color:t?C.teal:s?C.primary:C.text}}>{d}</span>
-                    {p ? <div style={{width:6, height:6, borderRadius:"50%", background:p.color, marginTop:2}}/> : <div style={{width:6, height:6, marginTop:2}}/>}
+                    {p
+                      ? <div style={{width:6, height:6, borderRadius:"50%", background:p.color, marginTop:2}}/>
+                      : <div style={{width:6, height:6, marginTop:2}}/>
+                    }
                   </div>
                 );
               })}
             </div>
         }
+
         {sel && (
           <div style={{marginTop:12, paddingTop:12, borderTop:`1px solid ${C.grey}`, display:"flex", alignItems:"center", gap:12}}>
             <div style={{width:40, height:40, borderRadius:8, background:C.wave, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
               <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.teal}}>{sel}</span>
             </div>
             {selProv
-              ? <><Avatar p={selProv} size={40} ring/><div style={{flex:1}}><p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{selProv.name}, {selProv.credentials}</p><p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>On call 7AM → 7AM next day</p></div></>
+              ? <>
+                  <Avatar p={selProv} size={40} ring/>
+                  <div style={{flex:1}}>
+                    <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{selProv.name}, {selProv.credentials}</p>
+                    <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>On call 7AM → 7AM next day</p>
+                  </div>
+                </>
               : <p style={{fontFamily:ffb, fontSize:13, color:C.sub, margin:0}}>No call assigned</p>
             }
           </div>
         )}
       </div>
+
       <NextStrip schedule={schedule}/>
       <button style={btnS({marginTop:14})}>Sync to Calendar</button>
     </div>
   );
 }
+
+// ─── Providers Page ───────────────────────────────────────────────────────────
 export function ProvidersPage({ onMessage }) {
   const [providers, setProviders] = useState([]);
   const [open, setOpen]           = useState(null);
 
-  useEffect(() => { fetchProviders().then(setProviders); }, []);
+  useEffect(() => {
+    fetchProviders().then(setProviders);
+  }, []);
 
   return (
     <div style={{paddingBottom:20}}>
@@ -240,8 +262,10 @@ export function ProvidersPage({ onMessage }) {
           </div>
           {open===p.id && (
             <div style={{display:"flex", gap:10, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.grey}`}}>
-              <button style={btnS({flex:1, padding:"9px", fontSize:13})} onClick={ev=>{ev.stopPropagation(); onMessage(p);}}>Message</button>
-              <button style={oBtnS({flex:1, padding:"9px", fontSize:13})} onClick={ev=>ev.stopPropagation()}>Switch Call</button>
+              <button style={btnS({flex:1, padding:"9px", fontSize:13})}
+                onClick={ev=>{ev.stopPropagation(); onMessage(p);}}>Message</button>
+              <button style={oBtnS({flex:1, padding:"9px", fontSize:13})}
+                onClick={ev=>ev.stopPropagation()}>Switch Call</button>
             </div>
           )}
         </div>
@@ -250,32 +274,42 @@ export function ProvidersPage({ onMessage }) {
   );
 }
 
+// ─── Request Page ─────────────────────────────────────────────────────────────
 export function RequestPage({ currentProvider }) {
-  const [tab,setTab]         = useState("new");
-  const [type,setType]       = useState("Days Off");
-  const [done,setDone]       = useState(false);
+  const [tab,setTab]     = useState("new");
+  const [type,setType]   = useState("Days Off");
+  const [done,setDone]   = useState(false);
   const [loading,setLoading] = useState(false);
   const [myReqs,setMyReqs]   = useState([]);
-  const [start,setStart]     = useState("");
-  const [end,setEnd]         = useState("");
+  const [start,setStart] = useState("");
+  const [end,setEnd]     = useState("");
 
   useEffect(() => {
-    if (currentProvider) fetchRequests(currentProvider.id).then(setMyReqs);
+    if (currentProvider) {
+      fetchRequests(currentProvider.id).then(setMyReqs);
+    }
   }, [currentProvider]);
 
   const opts = [
-    ["Days Off","Completely unavailable"],
+    ["Days Off",     "Completely unavailable"],
     ["Off Call Only","Available for clinic, no call"],
-    ["Call Switch","Swap with another provider"],
+    ["Call Switch",  "Swap with another provider"],
   ];
 
   const handleSubmit = async () => {
     if (!start || !end || !currentProvider) return;
     setLoading(true);
-    const { error } = await submitRequest({ providerId:currentProvider.id, type, startDate:start, endDate:end, notes:"" });
+    const { error } = await submitRequest({
+      providerId: currentProvider.id,
+      type,
+      startDate: start,
+      endDate: end,
+      notes: "",
+    });
     if (!error) {
       setDone(true);
-      fetchRequests(currentProvider.id).then(setMyReqs);
+      const updated = await fetchRequests(currentProvider.id);
+      setMyReqs(updated);
       setTimeout(() => setDone(false), 2500);
     }
     setLoading(false);
@@ -292,6 +326,7 @@ export function RequestPage({ currentProvider }) {
           }}>{l}</button>
         ))}
       </div>
+
       {tab==="new" && <>
         <div style={card({padding:"14px", marginBottom:12, display:"flex", gap:10, alignItems:"center"})}>
           <div style={{flex:1}}>
@@ -304,6 +339,7 @@ export function RequestPage({ currentProvider }) {
             <input type="date" value={end} onChange={e=>setEnd(e.target.value)} style={inpS}/>
           </div>
         </div>
+
         {opts.map(([title,sub]) => (
           <div key={title} onClick={()=>setType(title)} style={card({
             padding:"13px 16px", marginBottom:10, cursor:"pointer",
@@ -311,7 +347,12 @@ export function RequestPage({ currentProvider }) {
             background:type===title?`${C.wave}55`:"#FFF",
             display:"flex", alignItems:"center", gap:14
           })}>
-            <div style={{width:20, height:20, borderRadius:"50%", flexShrink:0, border:`2px solid ${type===title?C.teal:C.greyMid}`, background:type===title?C.teal:"transparent", display:"flex", alignItems:"center", justifyContent:"center"}}>
+            <div style={{
+              width:20, height:20, borderRadius:"50%", flexShrink:0,
+              border:`2px solid ${type===title?C.teal:C.greyMid}`,
+              background:type===title?C.teal:"transparent",
+              display:"flex", alignItems:"center", justifyContent:"center"
+            }}>
               {type===title && <div style={{width:7, height:7, borderRadius:"50%", background:"#fff"}}/>}
             </div>
             <div>
@@ -320,6 +361,7 @@ export function RequestPage({ currentProvider }) {
             </div>
           </div>
         ))}
+
         {done
           ? <div style={{padding:13, borderRadius:8, textAlign:"center", background:C.wave, border:`1.5px solid ${C.teal}`}}>
               <span style={{fontFamily:ff, fontWeight:900, fontSize:14, color:C.teal}}>Request Submitted!</span>
@@ -329,6 +371,7 @@ export function RequestPage({ currentProvider }) {
             </button>
         }
       </>}
+
       {tab==="mine" && myReqs.map(r => (
         <div key={r.id} style={card({padding:"13px 16px", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"space-between"})}>
           <div>
@@ -342,6 +385,7 @@ export function RequestPage({ currentProvider }) {
   );
 }
 
+// ─── More Page ────────────────────────────────────────────────────────────────
 export function MorePage({ onNav }) {
   const items = [
     ["🔐","Admin Panel","admin"],
@@ -353,7 +397,8 @@ export function MorePage({ onNav }) {
     <div style={{paddingBottom:20}}>
       <p style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text, marginBottom:12}}>More</p>
       {items.map(([icon,label,key]) => (
-        <div key={key} onClick={()=>onNav(key)} style={card({padding:"13px 16px", marginBottom:10, display:"flex", alignItems:"center", gap:14, cursor:"pointer"})}>
+        <div key={key} onClick={()=>onNav(key)}
+          style={card({padding:"13px 16px", marginBottom:10, display:"flex", alignItems:"center", gap:14, cursor:"pointer"})}>
           <div style={{width:36, height:36, borderRadius:8, background:C.wave, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17, flexShrink:0}}>{icon}</div>
           <span style={{fontFamily:ff, fontWeight:700, fontSize:14, color:C.text, flex:1}}>{label}</span>
           <span style={{color:C.greyMid, fontSize:18}}>›</span>
@@ -363,58 +408,14 @@ export function MorePage({ onNav }) {
   );
 }
 
-function AIScheduleGenerator() {
-  const [loading, setLoading] = useState(false);
-  const [summary, setSummary] = useState(null);
-  const [error, setError]     = useState(null);
-  const [month, setMonth]     = useState(10);
-  const [year, setYear]       = useState(2026);
-
-  const handleGenerate = async () => {
-    setLoading(true);
-    setError(null);
-    setSummary(null);
-    try {
-      const [providers, requests] = await Promise.all([fetchProviders(), fetchRequests()]);
-      const previousSchedule = await fetchSchedule(month===0?year-1:year, month===0?11:month-1);
-      const result = await generateSchedule({ providers, requests, year, month, previousSchedule });
-      await saveGeneratedSchedule(result.schedule, providers);
-      setSummary(result.summary);
-    } catch(err) {
-      setError("Something went wrong. Please try again.");
-      console.error(err);
-    }
-    setLoading(false);
-  };
-
-  return (
-    <div style={card({padding:"14px"})}>
-      <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>AI Schedule Generator</p>
-      <p style={{margin:"0 0 12px", fontFamily:ffb, fontSize:12, color:C.sub}}>Generate a fair call schedule using AI. Respects time-off requests, maximizes gaps between shifts, and balances calls evenly.</p>
-      <div style={{display:"flex", gap:8, marginBottom:12}}>
-        <select value={month} onChange={e=>setMonth(Number(e.target.value))} style={{...inpS, flex:1}}>
-          {MONTHS.map((m,i) => <option key={i} value={i}>{m}</option>)}
-        </select>
-        <input type="number" value={year} onChange={e=>setYear(Number(e.target.value))} style={{...inpS, width:80}} min={2026} max={2030}/>
-      </div>
-      {summary && (
-        <div style={{padding:"10px 12px", borderRadius:8, background:C.wave, border:`1px solid ${C.teal}`, marginBottom:12}}>
-          <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.text}}>{summary}</p>
-        </div>
-      )}
-      {error && <p style={{fontFamily:ffb, fontSize:12, color:"#e05555", marginBottom:12}}>{error}</p>}
-      <button style={btnS({opacity:loading?0.7:1})} onClick={handleGenerate} disabled={loading}>
-        {loading ? "Generating schedule..." : `Generate ${MONTHS[month]} ${year} Schedule`}
-      </button>
-    </div>
-  );
-}
-
+// ─── Admin Page ───────────────────────────────────────────────────────────────
 export function AdminPage({ onBack }) {
   const [tab,setTab]   = useState("requests");
   const [reqs,setReqs] = useState([]);
 
-  useEffect(() => { fetchRequests().then(setReqs); }, []);
+  useEffect(() => {
+    fetchRequests().then(setReqs);
+  }, []);
 
   const handleStatus = async (id, status) => {
     await updateRequestStatus(id, status);
@@ -427,6 +428,7 @@ export function AdminPage({ onBack }) {
         <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
         <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Admin Panel</span>
       </div>
+
       <div style={{display:"flex", background:"#FFF", borderRadius:8, padding:3, marginBottom:16, border:`1px solid ${C.grey}`}}>
         {[["requests","Requests"],["schedule","Schedule"]].map(([k,l]) => (
           <button key={k} onClick={()=>setTab(k)} style={{
@@ -436,8 +438,13 @@ export function AdminPage({ onBack }) {
           }}>{l}</button>
         ))}
       </div>
+
       {tab==="requests" && <>
-        {reqs.length===0 && <div style={card({padding:"20px", textAlign:"center"})}><p style={{fontFamily:ff, fontSize:13, color:C.sub}}>No requests yet</p></div>}
+        {reqs.length === 0 && (
+          <div style={card({padding:"20px", textAlign:"center"})}>
+            <p style={{fontFamily:ff, fontSize:13, color:C.sub}}>No requests yet</p>
+          </div>
+        )}
         {reqs.map(r => (
           <div key={r.id} style={card({padding:"13px 16px", marginBottom:10})}>
             <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:r.status==="Pending"?10:0}}>
@@ -450,14 +457,21 @@ export function AdminPage({ onBack }) {
             </div>
             {r.status==="Pending" && (
               <div style={{display:"flex", gap:8}}>
-                <button style={btnS({flex:1, padding:"9px", fontSize:12, background:"#65b896"})} onClick={()=>handleStatus(r.id,"Approved")}>Approve</button>
-                <button style={btnS({flex:1, padding:"9px", fontSize:12, background:C.coral})} onClick={()=>handleStatus(r.id,"Denied")}>Deny</button>
+                <button style={btnS({flex:1, padding:"9px", fontSize:12, background:"#65b896"})}
+                  onClick={()=>handleStatus(r.id,"Approved")}>Approve</button>
+                <button style={btnS({flex:1, padding:"9px", fontSize:12, background:C.coral})}
+                  onClick={()=>handleStatus(r.id,"Denied")}>Deny</button>
               </div>
             )}
           </div>
         ))}
-        <AIScheduleGenerator/>
+        <div style={card({padding:"14px"})}>
+          <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>AI Schedule Generator</p>
+          <p style={{margin:"0 0 12px", fontFamily:ffb, fontSize:12, color:C.sub}}>Generate an equitable call schedule for next month.</p>
+          <button style={btnS()}>Generate with AI</button>
+        </div>
       </>}
+
       {tab==="schedule" && (
         <div>
           <div style={card({padding:"14px", marginBottom:10})}>
@@ -474,6 +488,8 @@ export function AdminPage({ onBack }) {
     </div>
   );
 }
+
+// ─── Messages Page ────────────────────────────────────────────────────────────
 export function MessagesPage({ recipient, onBack, currentProvider }) {
   const [txt,setTxt]   = useState("");
   const [msgs,setMsgs] = useState([]);
@@ -486,7 +502,11 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
 
   const send = async () => {
     if (!txt.trim() || !currentProvider || !recipient) return;
-    const { data } = await sendMessage({ senderId:currentProvider.id, recipientId:recipient.id, text:txt });
+    const { data } = await sendMessage({
+      senderId: currentProvider.id,
+      recipientId: recipient.id,
+      text: txt,
+    });
     if (data) setMsgs(m => [...m, data]);
     setTxt("");
   };
@@ -501,33 +521,42 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
           <p style={{margin:0, fontFamily:ffb, fontSize:11, color:C.teal}}>● Online</p>
         </div>
       </div>
+
       <div style={{flex:1, overflowY:"auto", marginBottom:12}}>
         {msgs.map(m => {
           const isMe = currentProvider && m.sender_id === currentProvider.id;
           return (
             <div key={m.id} style={{display:"flex", justifyContent:isMe?"flex-end":"flex-start", marginBottom:10}}>
-              {!isMe && recipient && <div style={{marginRight:8, alignSelf:"flex-end"}}><Avatar p={recipient} size={26}/></div>}
+              {!isMe && recipient && (
+                <div style={{marginRight:8, alignSelf:"flex-end"}}><Avatar p={recipient} size={26}/></div>
+              )}
               <div style={{
                 maxWidth:"72%", padding:"9px 13px",
                 borderRadius:isMe?"12px 12px 3px 12px":"12px 12px 12px 3px",
-                background:isMe?C.teal:"#FFF", color:isMe?"#fff":C.text,
+                background:isMe?C.teal:"#FFF",
+                color:isMe?"#fff":C.text,
                 fontFamily:ffb, fontSize:13, boxShadow:"0 1px 5px rgba(0,0,0,0.07)"
               }}>
                 <p style={{margin:"0 0 3px"}}>{m.text}</p>
-                <span style={{fontSize:10, opacity:.6}}>{new Date(m.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})}</span>
+                <span style={{fontSize:10, opacity:.6}}>{new Date(m.created_at).toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"})}</span>
               </div>
             </div>
           );
         })}
       </div>
+
       <div style={{display:"flex", gap:8, flexShrink:0}}>
-        <input value={txt} onChange={e=>setTxt(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Type a message..." style={{...inpS, flex:1}}/>
+        <input value={txt} onChange={e=>setTxt(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&send()}
+          placeholder="Type a message..."
+          style={{...inpS, flex:1}}/>
         <button onClick={send} style={btnS({width:"auto", padding:"10px 16px", fontSize:13})}>Send</button>
       </div>
     </div>
   );
 }
 
+// ─── Settings Page ────────────────────────────────────────────────────────────
 export function SettingsPage({ onBack, onLogout, currentProvider }) {
   const [faceId,setFaceId] = useState(true);
   const [notifs,setNotifs] = useState({all:true, published:true, changes:true, messages:true});
@@ -538,6 +567,7 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
         <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
         <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Settings</span>
       </div>
+
       <div style={card({padding:"16px", marginBottom:12})}>
         <div style={{display:"flex", alignItems:"center", gap:14, marginBottom:14}}>
           {currentProvider && <Avatar p={currentProvider} size={50} ring/>}
@@ -553,6 +583,7 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
           </div>
         ))}
       </div>
+
       <div style={card({padding:"16px", marginBottom:12})}>
         <p style={{margin:"0 0 14px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>Security</p>
         <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14}}>
@@ -565,6 +596,7 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
         <button style={oBtnS({width:"100%", marginBottom:8, padding:"10px"})}>Change Password</button>
         <button onClick={onLogout} style={oBtnS({width:"100%", padding:"10px", color:C.coral, borderColor:C.coral})}>Logout</button>
       </div>
+
       <div style={card({padding:"16px"})}>
         <p style={{margin:"0 0 14px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>Notifications</p>
         {[["all","All Notifications"],["published","Schedule Published"],["changes","Schedule Changes"],["messages","Messages"]].map(([k,l]) => (
@@ -578,6 +610,7 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
   );
 }
 
+// ─── Fairness Page ────────────────────────────────────────────────────────────
 export function FairnessPage({ onBack }) {
   const [providers,setProviders] = useState([]);
   const [schedule,setSchedule]   = useState({});
@@ -589,7 +622,8 @@ export function FairnessPage({ onBack }) {
 
   const scheduleValues = Object.values(schedule);
   const data = providers.map(p => ({
-    p, calls: scheduleValues.filter(s => s?.id === p.id).length,
+    p,
+    calls: scheduleValues.filter(s => s?.id === p.id).length,
   }));
   const maxCalls = Math.max(...data.map(d=>d.calls), 1);
 
@@ -599,13 +633,16 @@ export function FairnessPage({ onBack }) {
         <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
         <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Call Fairness</span>
       </div>
+
       <div style={card({padding:"14px", marginBottom:12})}>
         <p style={{margin:"0 0 12px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>October 2026 — Call Distribution</p>
         {data.map(row => (
           <div key={row.p.id} style={{marginBottom:12}}>
             <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:4}}>
               <Avatar p={row.p} size={26}/>
-              <span style={{fontFamily:ff, fontWeight:700, fontSize:12, color:C.text, flex:1}}>{row.p.name.split(" ").slice(1).join(" ")}</span>
+              <span style={{fontFamily:ff, fontWeight:700, fontSize:12, color:C.text, flex:1}}>
+                {row.p.name.split(" ").slice(1).join(" ")}
+              </span>
               <span style={{fontFamily:ff, fontWeight:800, fontSize:12, color:row.p.color}}>{row.calls} calls</span>
             </div>
             <div style={{height:6, background:C.grey, borderRadius:3, overflow:"hidden"}}>
