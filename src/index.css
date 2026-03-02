@@ -13,3 +13,4 @@ body {
 
 ::-webkit-scrollbar { display: none; }
 input[type=date] { color-scheme: light; }
+button:empty { display: none; }
