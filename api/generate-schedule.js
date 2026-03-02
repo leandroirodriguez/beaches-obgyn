@@ -1,8 +1,8 @@
-const Anthropic = require("@anthropic-ai/sdk");
+import Anthropic from "@anthropic-ai/sdk";
 
 const client = new Anthropic({ apiKey: process.env.VITE_ANTHROPIC_KEY });
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
@@ -75,11 +75,4 @@ Respond ONLY with a valid JSON object in this exact format, no explanation, no m
     console.error("AI schedule error:", err);
     return res.status(500).json({ error: err.message });
   }
-};
-```
-
-Open `api/generate-schedule.js`, select all with **Cmd+A**, delete, paste this in, save with **Cmd+S**, then push:
-```
-git add .
-git commit -m "fix serverless function syntax"
-git push
+}
