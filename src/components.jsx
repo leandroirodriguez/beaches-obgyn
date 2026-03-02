@@ -127,7 +127,7 @@ export function Header({ onNotif, onSettings, logoSrc }) {
 }
 
 export function NextStrip({ schedule={} }) {
-  const base = new Date(2026,9,15);
+  const base = new Date();
   const days = Array.from({length:5}, (_,i) => {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
@@ -153,8 +153,8 @@ export function NextStrip({ schedule={} }) {
 }
 
 export function HomePage() {
-  const [yr,setYr]             = useState(2026);
-  const [mo,setMo]             = useState(9);
+  const [yr,setYr]             = useState(new Date().getFullYear());
+  const [mo,setMo]             = useState(new Date().getMonth());
   const [sel,setSel]           = useState(null);
   const [schedule,setSchedule] = useState({});
   const [loading,setLoading]   = useState(true);
@@ -174,7 +174,7 @@ export function HomePage() {
   for(let i=0;i<first;i++) cells.push(null);
   for(let d=1;d<=days;d++) cells.push(d);
 
-  const isToday = d => yr===2026 && mo===9 && d===15;
+  const today = new Date(); const isToday = d => yr===today.getFullYear() && mo===today.getMonth() && d===today.getDate();
   const prov    = d => schedule[dkey(yr,mo,d)];
   const prevMo  = () => mo===0  ? (setMo(11), setYr(y=>y-1)) : setMo(m=>m-1);
   const nextMo  = () => mo===11 ? (setMo(0),  setYr(y=>y+1)) : setMo(m=>m+1);
