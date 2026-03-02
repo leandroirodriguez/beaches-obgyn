@@ -242,7 +242,7 @@ export function ProvidersPage({ onMessage }) {
         <div key={p.id} onClick={()=>setOpen(open===p.id?null:p.id)}
           style={card({padding:"13px 16px", marginBottom:10, cursor:"pointer", borderLeft:`3px solid ${open===p.id?p.color:"transparent"}`})}>
           <div style={{display:"flex", alignItems:"center", gap:14}}>
-            <Avatar p={p} size={46} ring={open===p.id}/>
+            <Avatar p={p} size={46} ring/>
             <div style={{flex:1}}>
               <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{p.name}</p>
               <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{p.credentials}</p>
