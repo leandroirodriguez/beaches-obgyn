@@ -13,7 +13,8 @@ export async function fetchProviders() {
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 export async function fetchSchedule(year, month) {
   const start = `${year}-${String(month + 1).padStart(2, "0")}-01`;
-  const end   = `${year}-${String(month + 1).padStart(2, "0")}-31`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const end = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
   const { data, error } = await supabase
     .from("call_schedule")
@@ -129,8 +130,9 @@ export async function saveGeneratedSchedule(scheduleMap, providers) {
     const provider = providers.find(p => p.email === email);
     return { date, provider_id: provider?.id };
   }).filter(r => r.provider_id);
-console.log("Schedule map:", scheduleMap);
-console.log("Provider emails:", providers.map(p => p.email));
+
+  console.log("Schedule map:", scheduleMap);
+  console.log("Provider emails:", providers.map(p => p.email));
   console.log("Saving rows:", rows);
 
   if (rows.length === 0) {
@@ -138,12 +140,11 @@ console.log("Provider emails:", providers.map(p => p.email));
     return false;
   }
 
-  const month = rows[0].date.slice(0, 7);
+  const monthPrefix = rows[0].date.slice(0, 7);
   await supabase
     .from("call_schedule")
     .delete()
-    .gte("date", `${month}-01`)
-    .lte("date", `${month}-31`);
+    .like("date", `${monthPrefix}%`);
 
   const { error } = await supabase.from("call_schedule").insert(rows);
   if (error) console.error("saveGeneratedSchedule error:", error);
