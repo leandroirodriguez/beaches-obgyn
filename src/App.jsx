@@ -111,7 +111,7 @@ export default function App() {
     if (tab === "home")     return <HomePage/>;
     if (tab === "providers") return <ProvidersPage onMessage={onMessage}/>;
     if (tab === "request")  return <RequestPage currentProvider={currentProvider}/>;
-    if (tab === "more")     return <MorePage onNav={k=>setSub(k)}/>;
+    if (tab === "more")     return <MorePage onNav={k=>setSub(k)} currentProvider={currentProvider}/>;
   }
 
   return (
