@@ -13,7 +13,7 @@ export default async function handler(req, res) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   const providerList = providers.map(p =>
-    `- ${p.name} (${p.credentials}, no-call day preference: ${p.no_call_day || "none"}, participation: ${p.participation_percent || 100}%)`
+    `- ${p.name} (${p.credentials}, email: ${p.email}, no-call day preference: ${p.no_call_day || "none"}, participation: ${p.participation_percent || 100}%)`
   ).join("\n");
 
   const requestList = requests.length > 0
@@ -25,6 +25,8 @@ export default async function handler(req, res) {
   const previousCalls = previousSchedule
     ? Object.entries(previousSchedule).map(([date, p]) => `${date}: ${p.name}`).join("\n")
     : "No previous schedule data available.";
+
+  const emailList = providers.map(p => p.email).join(", ");
 
   const prompt = `You are scheduling on-call assignments for an OBGYN practice called Beaches OBGYN for ${monthName} ${year}.
 
@@ -49,6 +51,9 @@ CALL RULES:
 7. Balance the total number of calls per provider as evenly as possible
 8. Respect no-call day preferences where possible
 9. Do not assign a provider who had the last call of the previous month to the first day of this month
+
+CRITICAL: You MUST use ONLY these exact email addresses as values in the schedule JSON: ${emailList}
+Do NOT invent, modify, or use any other email addresses.
 
 Respond ONLY with a valid JSON object in this exact format, no explanation, no markdown:
 {
