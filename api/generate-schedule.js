@@ -28,6 +28,17 @@ export default async function handler(req, res) {
 
   const emailList = providers.map(p => p.email).join(", ");
 
+  // Build list of Fridays, Saturdays, Sundays in the month
+  const weekendInfo = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month, d);
+    const dow = date.getDay();
+    const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    if (dow === 5) weekendInfo.push(`${dateStr} is a FRIDAY — assign one provider`);
+    if (dow === 6) weekendInfo.push(`${dateStr} is a SATURDAY — assign one provider who will also cover Sunday automatically`);
+    if (dow === 0) weekendInfo.push(`${dateStr} is a SUNDAY — assign the SAME provider as the Saturday before it`);
+  }
+
   const prompt = `You are scheduling on-call assignments for an OBGYN practice called Beaches OBGYN for ${monthName} ${year}.
 
 The month has ${daysInMonth} days.
@@ -41,24 +52,29 @@ ${requestList}
 PREVIOUS MONTH CALL HISTORY (use this to ensure fairness continuity):
 ${previousCalls}
 
+WEEKEND STRUCTURE (very important):
+${weekendInfo.join("\n")}
+
 CALL RULES:
 1. Each day needs exactly one provider on call (7AM to 7AM next day)
-2. Maximum 1 call shift per provider every 3 days minimum
-3. Minimum 3 weeks between weekend call shifts for the same provider
-4. Respect all approved time-off requests
-5. Distribute weekday calls and weekend calls fairly across all providers
-6. MAXIMIZE the gap between each provider's call shifts
-7. Balance the total number of calls per provider as evenly as possible
-8. Respect no-call day preferences where possible
-9. Do not assign a provider who had the last call of the previous month to the first day of this month
+2. Weekdays (Mon-Thu): assign one provider per day
+3. FRIDAY: assign one provider — this counts as one weekend shift for that provider
+4. SATURDAY: assign one provider — this provider automatically covers Sunday too
+5. SUNDAY: assign the EXACT SAME provider as Saturday
+6. Friday and Saturday must ALWAYS be different providers
+7. Minimum 3 days between any two call shifts for the same provider
+8. Minimum 3 weeks between weekend shifts (Fri OR Sat/Sun) for the same provider
+9. Respect all approved time-off requests
+10. MAXIMIZE the gap between each provider's call shifts
+11. Balance total calls fairly — count Saturday+Sunday as 2 calls for that provider, Friday as 1 call
+12. Respect no-call day preferences where possible
 
-CRITICAL: You MUST use ONLY these exact email addresses as values in the schedule JSON: ${emailList}
-Do NOT invent, modify, or use any other email addresses.
+CRITICAL: Use ONLY these exact email addresses: ${emailList}
+Do NOT invent or modify any emails.
 
-Respond ONLY with a valid JSON object in this exact format, no explanation, no markdown:
+Respond ONLY with a valid JSON object, no explanation, no markdown:
 {
   "schedule": {
-    "YYYY-MM-DD": "provider_email",
     "YYYY-MM-DD": "provider_email"
   },
   "summary": "A brief 2-sentence summary of how fairness was achieved"
