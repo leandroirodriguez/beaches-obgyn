@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -341,15 +341,29 @@ export function RequestPage({ currentProvider }) {
             </button>
         }
       </>}
-      {tab==="mine" && myReqs.map(r => (
-        <div key={r.id} style={card({padding:"13px 16px", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"space-between"})}>
-          <div>
-            <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{r.type}</p>
-            <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{r.start_date} → {r.end_date}</p>
+      {tab==="mine" && myReqs.map(r => {
+        const canCancel = new Date(r.start_date) > new Date();
+        return (
+          <div key={r.id} style={card({padding:"13px 16px", marginBottom:10})}>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:canCancel?10:0}}>
+              <div>
+                <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{r.type}</p>
+                <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{r.start_date} → {r.end_date}</p>
+              </div>
+              <span style={badge(r.status)}>{r.status}</span>
+            </div>
+            {canCancel && (
+              <button style={oBtnS({width:"100%", padding:"8px", fontSize:12, color:C.coral, borderColor:C.coral})}
+                onClick={async () => {
+                  const ok = await cancelRequest(r.id);
+                  if (ok) fetchRequests(currentProvider.id).then(setMyReqs);
+                }}>
+                Cancel Request
+              </button>
+            )}
           </div>
-          <span style={badge(r.status)}>{r.status}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

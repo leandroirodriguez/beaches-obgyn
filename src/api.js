@@ -154,3 +154,13 @@ export async function saveGeneratedSchedule(scheduleMap, providers, year, month)
   else console.log("Saved successfully!");
   return !error;
 }
+
+// ─── Cancel Request ───────────────────────────────────────────────────────────
+export async function cancelRequest(requestId) {
+  const { error } = await supabase
+    .from("requests")
+    .delete()
+    .eq("id", requestId);
+  if (error) console.error("cancelRequest:", error);
+  return !error;
+}
