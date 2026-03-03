@@ -884,18 +884,28 @@ export function AdminPage({ onBack }) {
   };
 
   const callApi = async (path, body) => {
-    const res = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    return res.json();
+    try {
+      const res = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`API ${path} returned ${res.status}:`, text);
+        return { error: `Server error ${res.status}: ${text}` };
+      }
+      return res.json();
+    } catch (err) {
+      console.error(`API ${path} fetch failed:`, err);
+      return { error: `Network error: ${err.message}` };
+    }
   };
 
   const handleInvite = async (mode) => {
     setUserLoading(true); setUserMsg(null);
     const result = await callApi("/api/admin-invite", { name: newName, email: newEmail, credentials: newCreds, mode, tempPassword });
-    setUserMsg({ text: result.message || result.error, ok: !!result.message });
+    setUserMsg({ text: result.message || result.error || "Unknown error", ok: !!result.message });
     if (result.message) { fetchProviders().then(setProviders); setNewName(""); setNewEmail(""); setNewCreds(""); setTempPassword(""); }
     setUserLoading(false);
   };
@@ -903,7 +913,7 @@ export function AdminPage({ onBack }) {
   const handleReset = async (mode) => {
     setUserLoading(true); setUserMsg(null);
     const result = await callApi("/api/admin-reset-password", { email: targetProvider.email, mode, tempPassword });
-    setUserMsg({ text: result.message || result.error, ok: !!result.message });
+    setUserMsg({ text: result.message || result.error || "Unknown error", ok: !!result.message });
     if (result.message) setTempPassword("");
     setUserLoading(false);
   };
@@ -911,7 +921,11 @@ export function AdminPage({ onBack }) {
   const handleRoleToggle = async (provider) => {
     setUserLoading(true);
     const result = await callApi("/api/admin-update-role", { providerId: provider.id, isAdmin: !provider.is_admin });
-    if (result.message) fetchProviders().then(setProviders);
+    if (result.message) {
+      fetchProviders().then(setProviders);
+    } else {
+      setUserMsg({ text: result.error || "Failed to update role", ok: false });
+    }
     setUserLoading(false);
   };
 
