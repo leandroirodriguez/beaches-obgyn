@@ -989,7 +989,7 @@ export function FairnessPage({ onBack }) {
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
         {INTERVALS.map(iv => (
           <button key={iv.key} onClick={() => setIntervalKey(iv.key)} style={{
-            padding: "7px 12px", borderRadius: 20, border: `1.5px solid ${interval === iv.key ? C.teal : C.grey}`,
+            padding: "7px 12px", borderRadius: 8, border: `1.5px solid ${interval === iv.key ? C.teal : C.grey}`,
             background: interval === iv.key ? C.teal : "#FFF",
             color: interval === iv.key ? "#fff" : C.sub,
             fontFamily: ff, fontWeight: 700, fontSize: 11, cursor: "pointer",
