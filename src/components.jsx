@@ -856,14 +856,64 @@ function AIScheduleGenerator() {
 }
 
 export function AdminPage({ onBack }) {
-  const [tab, setTab]       = useState("requests");
-  const [reqs, setReqs]     = useState([]);
+  const [tab, setTab]               = useState("requests");
+  const [reqs, setReqs]             = useState([]);
   const [noCallReqs, setNoCallReqs] = useState([]);
+  const [providers, setProviders]   = useState([]);
+
+  // Users tab state
+  const [userAction, setUserAction]     = useState(null); // "invite" | "create" | "reset" | null
+  const [targetProvider, setTargetProvider] = useState(null);
+  const [newName, setNewName]           = useState("");
+  const [newEmail, setNewEmail]         = useState("");
+  const [newCreds, setNewCreds]         = useState("");
+  const [tempPassword, setTempPassword] = useState("");
+  const [userMsg, setUserMsg]           = useState(null); // { text, ok }
+  const [userLoading, setUserLoading]   = useState(false);
 
   useEffect(() => {
     fetchRequests().then(setReqs);
     fetchNoCallDayRequests().then(setNoCallReqs);
+    fetchProviders().then(setProviders);
   }, []);
+
+  const resetUserForm = () => {
+    setUserAction(null); setTargetProvider(null);
+    setNewName(""); setNewEmail(""); setNewCreds(""); setTempPassword("");
+    setUserMsg(null);
+  };
+
+  const callApi = async (path, body) => {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    return res.json();
+  };
+
+  const handleInvite = async (mode) => {
+    setUserLoading(true); setUserMsg(null);
+    const result = await callApi("/api/admin-invite", { name: newName, email: newEmail, credentials: newCreds, mode, tempPassword });
+    setUserMsg({ text: result.message || result.error, ok: !!result.message });
+    if (result.message) { fetchProviders().then(setProviders); setNewName(""); setNewEmail(""); setNewCreds(""); setTempPassword(""); }
+    setUserLoading(false);
+  };
+
+  const handleReset = async (mode) => {
+    setUserLoading(true); setUserMsg(null);
+    const result = await callApi("/api/admin-reset-password", { email: targetProvider.email, mode, tempPassword });
+    setUserMsg({ text: result.message || result.error, ok: !!result.message });
+    if (result.message) setTempPassword("");
+    setUserLoading(false);
+  };
+
+  const handleRoleToggle = async (provider) => {
+    setUserLoading(true);
+    const result = await callApi("/api/admin-update-role", { providerId: provider.id, isAdmin: !provider.is_admin });
+    if (result.message) fetchProviders().then(setProviders);
+    setUserLoading(false);
+  };
 
   const handleStatus = async (id, status) => {
     await updateRequestStatus(id, status);
@@ -886,12 +936,13 @@ export function AdminPage({ onBack }) {
       <div style={{display:"flex", background:"#FFF", borderRadius:8, padding:3, marginBottom:16, border:`1px solid ${C.grey}`}}>
         {[
           ["requests", "Requests"],
-          ["nocall",   `No-Call Day${pendingNoCall > 0 ? ` (${pendingNoCall})` : ""}`],
+          ["nocall",   `No-Call${pendingNoCall > 0 ? ` (${pendingNoCall})` : ""}`],
+          ["users",    "Users"],
           ["schedule", "Schedule"],
         ].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{
-            flex: 1, padding: "9px 4px", borderRadius: 6, border: "none",
-            fontFamily: ff, fontWeight: 800, fontSize: 11, cursor: "pointer",
+            flex: 1, padding: "9px 2px", borderRadius: 6, border: "none",
+            fontFamily: ff, fontWeight: 800, fontSize: 10, cursor: "pointer",
             background: tab === k ? C.teal : "transparent",
             color: tab === k ? "#fff" : C.sub,
           }}>{l}</button>
@@ -948,7 +999,130 @@ export function AdminPage({ onBack }) {
         ))}
       </>}
 
-      {tab === "schedule" && (
+      {tab === "users" && <>
+
+        {/* Add new user card */}
+        <div style={card({padding:"14px", marginBottom:14})}>
+          <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: userAction === "invite" || userAction === "create" ? 12 : 0}}>
+            <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>Add New User</p>
+            <div style={{display:"flex", gap:6}}>
+              {[["invite","Send Invite"],["create","Set Password"]].map(([mode, label]) => (
+                <button key={mode} onClick={() => { resetUserForm(); setUserAction(userAction === mode ? null : mode); }} style={{
+                  padding:"6px 10px", borderRadius:7, border:`1.5px solid ${userAction===mode ? C.teal : C.grey}`,
+                  background: userAction===mode ? C.teal : "#FFF",
+                  color: userAction===mode ? "#fff" : C.sub,
+                  fontFamily:ff, fontWeight:700, fontSize:11, cursor:"pointer",
+                }}>{label}</button>
+              ))}
+            </div>
+          </div>
+
+          {(userAction === "invite" || userAction === "create") && <>
+            <div style={{marginBottom:8}}>
+              <span style={lblS}>Full Name</span>
+              <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Dr. Jane Smith" style={inpS}/>
+            </div>
+            <div style={{marginBottom:8}}>
+              <span style={lblS}>Email</span>
+              <input type="email" value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="jane@beachesobgyn.com" style={inpS}/>
+            </div>
+            <div style={{marginBottom: userAction==="create" ? 8 : 12}}>
+              <span style={lblS}>Credentials</span>
+              <input value={newCreds} onChange={e=>setNewCreds(e.target.value)} placeholder="MD, DO, NP…" style={inpS}/>
+            </div>
+            {userAction === "create" && (
+              <div style={{marginBottom:12}}>
+                <span style={lblS}>Temporary Password</span>
+                <input type="password" value={tempPassword} onChange={e=>setTempPassword(e.target.value)} placeholder="Min 6 characters" style={inpS}/>
+              </div>
+            )}
+            {userMsg && (
+              <div style={{padding:"8px 12px", borderRadius:7, marginBottom:10, background: userMsg.ok ? C.wave : "#fff0f0", border:`1px solid ${userMsg.ok ? C.teal : C.coral}`}}>
+                <p style={{margin:0, fontFamily:ffb, fontSize:12, color: userMsg.ok ? C.teal : C.coral}}>{userMsg.text}</p>
+              </div>
+            )}
+            <button
+              style={btnS({opacity: userLoading ? 0.6 : 1})}
+              disabled={userLoading}
+              onClick={() => handleInvite(userAction)}
+            >
+              {userLoading ? "Processing…" : userAction === "invite" ? "Send Invite Email" : "Create Account"}
+            </button>
+          </>}
+        </div>
+
+        {/* Provider list */}
+        <p style={{fontFamily:ff, fontWeight:800, fontSize:11, color:C.sub, textTransform:"uppercase", letterSpacing:1, marginBottom:8}}>
+          Current Users
+        </p>
+        {providers.map(p => (
+          <div key={p.id} style={card({padding:"13px 16px", marginBottom:10})}>
+            <div style={{display:"flex", alignItems:"center", gap:10, marginBottom: targetProvider?.id === p.id ? 12 : 0}}>
+              <Avatar p={p} size={36}/>
+              <div style={{flex:1}}>
+                <div style={{display:"flex", alignItems:"center", gap:6}}>
+                  <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{p.name}</p>
+                  {p.is_admin && <span style={{fontFamily:ff, fontWeight:700, fontSize:9, color:"#fff", background:C.teal, borderRadius:4, padding:"2px 5px"}}>ADMIN</span>}
+                </div>
+                <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{p.email}</p>
+              </div>
+              <button
+                onClick={() => { setTargetProvider(targetProvider?.id === p.id ? null : p); setUserMsg(null); setTempPassword(""); }}
+                style={{background:"none", border:"none", fontSize:18, cursor:"pointer", color:C.greyMid}}
+              >
+                {targetProvider?.id === p.id ? "∨" : "›"}
+              </button>
+            </div>
+
+            {targetProvider?.id === p.id && <>
+              {/* Reset password */}
+              <div style={{borderTop:`1px solid ${C.grey}`, paddingTop:12, marginBottom:10}}>
+                <p style={{margin:"0 0 8px", fontFamily:ff, fontWeight:700, fontSize:12, color:C.text}}>Reset Password</p>
+                <div style={{display:"flex", gap:8, marginBottom:8}}>
+                  <button
+                    style={oBtnS({flex:1, padding:"8px", fontSize:11})}
+                    disabled={userLoading}
+                    onClick={() => handleReset("email")}
+                  >
+                    {userLoading ? "…" : "Send Reset Email"}
+                  </button>
+                </div>
+                <div style={{display:"flex", gap:8, alignItems:"center"}}>
+                  <input
+                    type="password"
+                    value={tempPassword}
+                    onChange={e=>setTempPassword(e.target.value)}
+                    placeholder="Set temp password…"
+                    style={{...inpS, flex:1, margin:0}}
+                  />
+                  <button
+                    style={btnS({width:"auto", padding:"9px 12px", fontSize:11, opacity: tempPassword ? 1 : 0.5})}
+                    disabled={!tempPassword || userLoading}
+                    onClick={() => handleReset("temp")}
+                  >
+                    Set
+                  </button>
+                </div>
+              </div>
+
+              {/* Toggle admin role */}
+              <div style={{borderTop:`1px solid ${C.grey}`, paddingTop:12, display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+                <div>
+                  <p style={{margin:0, fontFamily:ff, fontWeight:700, fontSize:12, color:C.text}}>Admin Access</p>
+                  <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>Can manage schedules & users</p>
+                </div>
+                <Toggle val={!!p.is_admin} fn={() => handleRoleToggle(p)}/>
+              </div>
+
+              {userMsg && targetProvider?.id === p.id && (
+                <div style={{padding:"8px 12px", borderRadius:7, marginTop:10, background: userMsg.ok ? C.wave : "#fff0f0", border:`1px solid ${userMsg.ok ? C.teal : C.coral}`}}>
+                  <p style={{margin:0, fontFamily:ffb, fontSize:12, color: userMsg.ok ? C.teal : C.coral}}>{userMsg.text}</p>
+                </div>
+              )}
+            </>}
+          </div>
+        ))}
+      </>}
         <div>
           <div style={card({padding:"14px", marginBottom:10})}>
             <p style={{margin:"0 0 10px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>October 2026</p>
