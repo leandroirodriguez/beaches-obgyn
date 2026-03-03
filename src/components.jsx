@@ -167,14 +167,18 @@ export function Header({ onNotif, onSettings, logoSrc }) {
   );
 }
 
-export function NextStrip({ schedule={} }) {
-  const base = new Date();
+export function NextStrip({ schedule={}, year, month }) {
+  const now = new Date();
+  const isCurrentMonth = year === now.getFullYear() && month === now.getMonth();
+  const base = isCurrentMonth ? now : new Date(year, month, 1);
+
   const days = Array.from({length:5}, (_,i) => {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
     const k = dkey(d.getFullYear(), d.getMonth(), d.getDate());
     return { d, p: schedule[k] };
   });
+
   return (
     <div style={card({padding:"12px 14px", background:`linear-gradient(135deg,${C.wave}99,#FFF)`, border:`1px solid ${C.wave}`})}>
       <p style={{margin:"0 0 10px", fontFamily:ff, fontWeight:800, fontSize:10, color:C.teal, letterSpacing:1.2, textTransform:"uppercase"}}>
@@ -215,7 +219,8 @@ export function HomePage() {
   for(let i=0;i<first;i++) cells.push(null);
   for(let d=1;d<=days;d++) cells.push(d);
 
-  const today = new Date(); const isToday = d => yr===today.getFullYear() && mo===today.getMonth() && d===today.getDate();
+  const today = new Date();
+  const isToday = d => yr===today.getFullYear() && mo===today.getMonth() && d===today.getDate();
   const prov    = d => schedule[dkey(yr,mo,d)];
   const prevMo  = () => mo===0  ? (setMo(11), setYr(y=>y-1)) : setMo(m=>m-1);
   const nextMo  = () => mo===11 ? (setMo(0),  setYr(y=>y+1)) : setMo(m=>m+1);
@@ -265,7 +270,7 @@ export function HomePage() {
           </div>
         )}
       </div>
-      <NextStrip schedule={schedule}/>
+      <NextStrip schedule={schedule} year={yr} month={mo}/>
       <button style={btnS({marginTop:14})}>Sync to Calendar</button>
     </div>
   );
@@ -312,7 +317,6 @@ export function RequestPage({ currentProvider }) {
   const [start, setStart]     = useState("");
   const [end, setEnd]         = useState("");
 
-  // No-call day state
   const [noCallReqs, setNoCallReqs]       = useState([]);
   const [noCallDay, setNoCallDay]         = useState("");
   const [noCallNotes, setNoCallNotes]     = useState("");
@@ -359,7 +363,6 @@ export function RequestPage({ currentProvider }) {
     setNoCallLoading(false);
   };
 
-  // Days already pending or approved — disable in dropdown
   const takenDays = noCallReqs.filter(r => r.status !== "Denied").map(r => r.requested_day);
 
   const noCallBadgeStyle = (status) => {
@@ -370,8 +373,6 @@ export function RequestPage({ currentProvider }) {
 
   return (
     <div style={{ paddingBottom: 20 }}>
-
-      {/* Tab Bar */}
       <div style={{ display: "flex", background: "#FFF", borderRadius: 8, padding: 3, marginBottom: 16, border: `1px solid ${C.grey}` }}>
         {[
           ["new",    "New Request"],
@@ -387,7 +388,6 @@ export function RequestPage({ currentProvider }) {
         ))}
       </div>
 
-      {/* Tab: New Request */}
       {tab === "new" && <>
         <div style={card({ padding: "14px", marginBottom: 12, display: "flex", gap: 10, alignItems: "center" })}>
           <div style={{ flex: 1 }}>
@@ -431,7 +431,6 @@ export function RequestPage({ currentProvider }) {
         }
       </>}
 
-      {/* Tab: My Requests */}
       {tab === "mine" && myReqs.map(r => {
         const canCancel = new Date(r.start_date) > new Date();
         return (
@@ -457,18 +456,13 @@ export function RequestPage({ currentProvider }) {
         );
       })}
 
-      {/* Tab: No-Call Day */}
       {tab === "nocall" && <>
-
-        {/* Info banner */}
         <div style={card({ padding: "12px 14px", marginBottom: 14, background: `${C.wave}88`, border: `1px solid ${C.teal}33` })}>
           <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.teal }}>Recurring Weekly No-Call Day</p>
           <p style={{ margin: "4px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>
             Request one day per week where you won't be assigned to call. Requires admin approval.
           </p>
         </div>
-
-        {/* Show current approved no-call day if set on provider */}
         {currentProvider?.no_call_day && (
           <div style={card({ padding: "12px 14px", marginBottom: 14, borderLeft: `3px solid #65b896` })}>
             <p style={{ margin: 0, fontFamily: ff, fontWeight: 700, fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: 1 }}>
@@ -479,11 +473,8 @@ export function RequestPage({ currentProvider }) {
             </p>
           </div>
         )}
-
-        {/* Request form */}
         <div style={card({ padding: "14px", marginBottom: 14 })}>
           <p style={{ margin: "0 0 12px", fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>Submit a New Request</p>
-
           <span style={lblS}>Preferred Day</span>
           <select value={noCallDay} onChange={e => setNoCallDay(e.target.value)} style={{ ...inpS, marginBottom: 12 }}>
             <option value="">Select a day…</option>
@@ -493,7 +484,6 @@ export function RequestPage({ currentProvider }) {
               </option>
             ))}
           </select>
-
           <span style={lblS}>Notes (optional)</span>
           <textarea
             value={noCallNotes}
@@ -502,7 +492,6 @@ export function RequestPage({ currentProvider }) {
             rows={2}
             style={{ ...inpS, resize: "none", marginBottom: 12, fontFamily: ffb }}
           />
-
           {noCallDone
             ? <div style={{ padding: 13, borderRadius: 8, textAlign: "center", background: C.wave, border: `1.5px solid ${C.teal}` }}>
                 <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 14, color: C.teal }}>Request Submitted!</span>
@@ -516,8 +505,6 @@ export function RequestPage({ currentProvider }) {
               </button>
           }
         </div>
-
-        {/* Request history */}
         {noCallReqs.length > 0 && <>
           <p style={{ fontFamily: ff, fontWeight: 800, fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>
             My Requests
@@ -538,7 +525,6 @@ export function RequestPage({ currentProvider }) {
           ))}
         </>}
       </>}
-
     </div>
   );
 }
@@ -616,8 +602,8 @@ function AIScheduleGenerator() {
 }
 
 export function AdminPage({ onBack }) {
-  const [tab, setTab]   = useState("requests");
-  const [reqs, setReqs] = useState([]);
+  const [tab, setTab]       = useState("requests");
+  const [reqs, setReqs]     = useState([]);
   const [noCallReqs, setNoCallReqs] = useState([]);
 
   useEffect(() => {
@@ -658,7 +644,6 @@ export function AdminPage({ onBack }) {
         ))}
       </div>
 
-      {/* Admin: Regular Requests */}
       {tab === "requests" && <>
         {reqs.length === 0 && <div style={card({padding:"20px", textAlign:"center"})}><p style={{fontFamily:ff, fontSize:13, color:C.sub}}>No requests yet</p></div>}
         {reqs.map(r => (
@@ -682,7 +667,6 @@ export function AdminPage({ onBack }) {
         <AIScheduleGenerator/>
       </>}
 
-      {/* Admin: No-Call Day Requests */}
       {tab === "nocall" && <>
         {noCallReqs.length === 0 && (
           <div style={card({padding:"20px", textAlign:"center"})}>
@@ -695,32 +679,21 @@ export function AdminPage({ onBack }) {
               {r.providers && <Avatar p={r.providers} size={36}/>}
               <div style={{flex:1}}>
                 <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{r.providers?.name}</p>
-                <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>
-                  Recurring · {r.requested_day}
-                </p>
+                <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>Recurring · {r.requested_day}</p>
                 {r.notes && <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{r.notes}</p>}
               </div>
               <span style={badge(r.status)}>{r.status}</span>
             </div>
             {r.status === "Pending" && (
               <div style={{display:"flex", gap:8}}>
-                <button
-                  style={btnS({flex:1, padding:"9px", fontSize:12, background:"#65b896"})}
-                  onClick={() => handleNoCallStatus(r.id, "Approved", r.provider_id, r.requested_day)}>
-                  Approve
-                </button>
-                <button
-                  style={btnS({flex:1, padding:"9px", fontSize:12, background:C.coral})}
-                  onClick={() => handleNoCallStatus(r.id, "Denied", r.provider_id, r.requested_day)}>
-                  Deny
-                </button>
+                <button style={btnS({flex:1, padding:"9px", fontSize:12, background:"#65b896"})} onClick={()=>handleNoCallStatus(r.id,"Approved",r.provider_id,r.requested_day)}>Approve</button>
+                <button style={btnS({flex:1, padding:"9px", fontSize:12, background:C.coral})} onClick={()=>handleNoCallStatus(r.id,"Denied",r.provider_id,r.requested_day)}>Deny</button>
               </div>
             )}
           </div>
         ))}
       </>}
 
-      {/* Admin: Schedule */}
       {tab === "schedule" && (
         <div>
           <div style={card({padding:"14px", marginBottom:10})}>
@@ -910,41 +883,178 @@ export function UpcomingVacationsPage({ onBack }) {
 }
 
 export function FairnessPage({ onBack }) {
-  const [providers,setProviders] = useState([]);
-  const [schedule,setSchedule]   = useState({});
+  const [providers, setProviders] = useState([]);
+  const [allSchedules, setAllSchedules] = useState({});
+  const [loading, setLoading]     = useState(true);
+  const [interval, setIntervalKey] = useState("past3");
+
+  // Define intervals relative to today
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const shiftMonths = (date, n) => {
+    const d = new Date(date);
+    d.setMonth(d.getMonth() + n);
+    return d;
+  };
+
+  const INTERVALS = [
+    { key: "past3",     label: "Past 3 mo",    start: shiftMonths(today, -3), end: today },
+    { key: "past6",     label: "Past 6 mo",    start: shiftMonths(today, -6), end: today },
+    { key: "past12",    label: "Past 12 mo",   start: shiftMonths(today, -12), end: today },
+    { key: "future3",   label: "Next 3 mo",    start: today, end: shiftMonths(today, 3) },
+    { key: "future6",   label: "Next 6 mo",    start: today, end: shiftMonths(today, 6) },
+  ];
+
+  const selectedInterval = INTERVALS.find(i => i.key === interval);
+
+  // Collect all year/month combos we need to fetch for the selected interval
+  const getMonthsInRange = (start, end) => {
+    const months = [];
+    const cur = new Date(start.getFullYear(), start.getMonth(), 1);
+    const last = new Date(end.getFullYear(), end.getMonth(), 1);
+    while (cur <= last) {
+      months.push({ year: cur.getFullYear(), month: cur.getMonth() });
+      cur.setMonth(cur.getMonth() + 1);
+    }
+    return months;
+  };
 
   useEffect(() => {
     fetchProviders().then(setProviders);
-    fetchSchedule(2026, 9).then(setSchedule);
   }, []);
 
-  const scheduleValues = Object.values(schedule);
-  const data = providers.map(p => ({
-    p, calls: scheduleValues.filter(s => s?.id === p.id).length,
-  }));
-  const maxCalls = Math.max(...data.map(d=>d.calls), 1);
+  useEffect(() => {
+    if (!selectedInterval) return;
+    setLoading(true);
+    const months = getMonthsInRange(selectedInterval.start, selectedInterval.end);
+    Promise.all(months.map(({ year, month }) =>
+      fetchSchedule(year, month).then(data => ({ year, month, data }))
+    )).then(results => {
+      const merged = {};
+      results.forEach(({ data }) => Object.assign(merged, data));
+      setAllSchedules(merged);
+      setLoading(false);
+    });
+  }, [interval]);
+
+  // Classify a date string (YYYY-MM-DD) into day type
+  const getDayType = (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00");
+    const dow = d.getDay(); // 0=Sun, 1=Mon ... 6=Sat
+    if (dow === 0 || dow === 6) return "weekend";
+    if (dow === 5) return "friday";
+    return "weekday"; // Mon-Thu
+  };
+
+  // Filter schedule to only dates within the selected interval
+  const isInRange = (dateStr) => {
+    const d = new Date(dateStr + "T00:00:00");
+    return d >= selectedInterval.start && d <= selectedInterval.end;
+  };
+
+  // Build counts per provider per day type
+  const buildCounts = () => {
+    const counts = {};
+    providers.forEach(p => {
+      counts[p.id] = { weekday: 0, friday: 0, weekend: 0, total: 0 };
+    });
+    Object.entries(allSchedules).forEach(([dateStr, prov]) => {
+      if (!prov || !isInRange(dateStr)) return;
+      if (!counts[prov.id]) return;
+      const type = getDayType(dateStr);
+      counts[prov.id][type]++;
+      counts[prov.id].total++;
+    });
+    return counts;
+  };
+
+  const counts = buildCounts();
+  const maxTotal = Math.max(...providers.map(p => counts[p.id]?.total || 0), 1);
+
+  const DAY_TYPES = [
+    { key: "weekday", label: "Mon–Thu", color: C.teal },
+    { key: "friday",  label: "Friday",  color: "#8b7cf6" },
+    { key: "weekend", label: "Sat–Sun", color: C.coral },
+  ];
 
   return (
-    <div style={{paddingBottom:20}}>
-      <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:16}}>
-        <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
-        <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Call Fairness</span>
+    <div style={{ paddingBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.primary }}>‹</button>
+        <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 16, color: C.text }}>Call Fairness</span>
       </div>
-      <div style={card({padding:"14px", marginBottom:12})}>
-        <p style={{margin:"0 0 12px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>October 2026 — Call Distribution</p>
-        {data.map(row => (
-          <div key={row.p.id} style={{marginBottom:12}}>
-            <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:4}}>
-              <Avatar p={row.p} size={26}/>
-              <span style={{fontFamily:ff, fontWeight:700, fontSize:12, color:C.text, flex:1}}>{row.p.name.split(" ").slice(1).join(" ")}</span>
-              <span style={{fontFamily:ff, fontWeight:800, fontSize:12, color:row.p.color}}>{row.calls} calls</span>
-            </div>
-            <div style={{height:6, background:C.grey, borderRadius:3, overflow:"hidden"}}>
-              <div style={{height:"100%", width:`${(row.calls/maxCalls)*100}%`, background:row.p.color, borderRadius:3}}/>
-            </div>
+
+      {/* Interval selector */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        {INTERVALS.map(iv => (
+          <button key={iv.key} onClick={() => setIntervalKey(iv.key)} style={{
+            padding: "7px 12px", borderRadius: 20, border: `1.5px solid ${interval === iv.key ? C.teal : C.grey}`,
+            background: interval === iv.key ? C.teal : "#FFF",
+            color: interval === iv.key ? "#fff" : C.sub,
+            fontFamily: ff, fontWeight: 700, fontSize: 11, cursor: "pointer",
+          }}>{iv.label}</button>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div style={{ display: "flex", gap: 14, marginBottom: 14, flexWrap: "wrap" }}>
+        {DAY_TYPES.map(dt => (
+          <div key={dt.key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: dt.color }} />
+            <span style={{ fontFamily: ffb, fontSize: 11, color: C.sub }}>{dt.label}</span>
           </div>
         ))}
       </div>
+
+      {loading
+        ? <div style={{ textAlign: "center", padding: "30px", color: C.sub, fontFamily: ff, fontSize: 13 }}>Loading...</div>
+        : <div style={card({ padding: "14px" })}>
+            {providers.map(p => {
+              const c = counts[p.id] || { weekday: 0, friday: 0, weekend: 0, total: 0 };
+              const totalPct = (c.total / maxTotal) * 100;
+              const wdPct    = c.total > 0 ? (c.weekday / c.total) * 100 : 0;
+              const frPct    = c.total > 0 ? (c.friday  / c.total) * 100 : 0;
+              const wePct    = c.total > 0 ? (c.weekend / c.total) * 100 : 0;
+
+              return (
+                <div key={p.id} style={{ marginBottom: 16 }}>
+                  {/* Provider row */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                    <Avatar p={p} size={28}/>
+                    <span style={{ fontFamily: ff, fontWeight: 700, fontSize: 12, color: C.text, flex: 1 }}>
+                      {p.name.split(" ").slice(1).join(" ")}
+                    </span>
+                    <span style={{ fontFamily: ff, fontWeight: 800, fontSize: 12, color: p.color }}>
+                      {c.total} total
+                    </span>
+                  </div>
+
+                  {/* Stacked bar */}
+                  <div style={{ height: 8, background: C.grey, borderRadius: 4, overflow: "hidden", marginBottom: 5, width: "100%" }}>
+                    <div style={{ height: "100%", width: `${totalPct}%`, display: "flex", borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{ width: `${wdPct}%`, background: C.teal }} />
+                      <div style={{ width: `${frPct}%`, background: "#8b7cf6" }} />
+                      <div style={{ width: `${wePct}%`, background: C.coral }} />
+                    </div>
+                  </div>
+
+                  {/* Counts row */}
+                  <div style={{ display: "flex", gap: 10 }}>
+                    {DAY_TYPES.map(dt => (
+                      <div key={dt.key} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <div style={{ width: 7, height: 7, borderRadius: 1, background: dt.color, flexShrink: 0 }} />
+                        <span style={{ fontFamily: ffb, fontSize: 11, color: C.sub }}>
+                          {dt.label}: <strong style={{ color: C.text }}>{c[dt.key]}</strong>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+      }
     </div>
   );
 }
