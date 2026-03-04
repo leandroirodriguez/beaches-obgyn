@@ -918,7 +918,18 @@ export function AdminPage({ onBack }) {
     setUserLoading(false);
   };
 
-  const handleRoleToggle = async (provider) => {
+  const handleDeleteUser = async (provider) => {
+    if (!window.confirm(`Are you sure you want to delete ${provider.name}? This cannot be undone.`)) return;
+    setUserLoading(true);
+    const result = await callApi("/api/admin-delete-user", { providerId: provider.id, email: provider.email });
+    if (result.message) {
+      fetchProviders().then(setProviders);
+      setTargetProvider(null);
+    } else {
+      setUserMsg({ text: result.error || "Failed to delete user", ok: false });
+    }
+    setUserLoading(false);
+  };
     setUserLoading(true);
     const result = await callApi("/api/admin-update-role", { providerId: provider.id, isAdmin: !provider.is_admin });
     if (result.message) {
@@ -1120,13 +1131,22 @@ export function AdminPage({ onBack }) {
               </div>
 
               {/* Toggle admin role */}
-              <div style={{borderTop:`1px solid ${C.grey}`, paddingTop:12, display:"flex", alignItems:"center", justifyContent:"space-between"}}>
+              <div style={{borderTop:`1px solid ${C.grey}`, paddingTop:12, display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12}}>
                 <div>
                   <p style={{margin:0, fontFamily:ff, fontWeight:700, fontSize:12, color:C.text}}>Admin Access</p>
                   <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>Can manage schedules & users</p>
                 </div>
                 <Toggle val={!!p.is_admin} fn={() => handleRoleToggle(p)}/>
               </div>
+
+              {/* Delete user */}
+              <button
+                style={oBtnS({width:"100%", padding:"9px", fontSize:12, color:C.coral, borderColor:C.coral, opacity: userLoading ? 0.6 : 1})}
+                disabled={userLoading}
+                onClick={() => handleDeleteUser(p)}
+              >
+                {userLoading ? "Processing…" : "Delete User"}
+              </button>
 
               {userMsg && targetProvider?.id === p.id && (
                 <div style={{padding:"8px 12px", borderRadius:7, marginTop:10, background: userMsg.ok ? C.wave : "#fff0f0", border:`1px solid ${userMsg.ok ? C.teal : C.coral}`}}>
