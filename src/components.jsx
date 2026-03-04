@@ -411,7 +411,6 @@ export function RequestPage({ currentProvider }) {
   const handleSwitchSubmit = async () => {
     if (!switchDate || !switchToDate || !currentProvider) return;
     setLoading(true);
-    const otherProvider = switchSchedule[switchDate];
     const provOnSwitchTo = switchSchedule[switchToDate];
     const { error } = await submitRequest({
       providerId: currentProvider.id,
@@ -419,7 +418,7 @@ export function RequestPage({ currentProvider }) {
       startDate: switchDate,
       endDate: switchToDate,
       notes: `Requesting to give away ${switchDate} and take ${switchToDate} (currently assigned to ${provOnSwitchTo?.name || "nobody"})`,
-      targetProviderId: otherProvider?.id || null,
+      targetProviderId: provOnSwitchTo?.id || null,
     });
     if (!error) {
       setDone(true);
