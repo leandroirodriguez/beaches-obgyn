@@ -1050,8 +1050,6 @@ export function PrintSchedulePage({ onBack }) {
   };
 
   return (
-    <>
-      {/* UI */}
       <div style={{ paddingBottom: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.primary }}>‹</button>
