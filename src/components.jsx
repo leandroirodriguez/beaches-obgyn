@@ -276,30 +276,133 @@ export function HomePage() {
   );
 }
 
-export function ProvidersPage({ onMessage }) {
-  const [providers, setProviders] = useState([]);
-  const [open, setOpen]           = useState(null);
+export function ProvidersPage({ onMessage, currentProvider }) {
+  const [providers, setProviders]   = useState([]);
+  const [open, setOpen]             = useState(null);
+  const [schedules, setSchedules]   = useState({});
+  const [messages, setMessages]     = useState({});
+  const [loadingId, setLoadingId]   = useState(null);
 
   useEffect(() => { fetchProviders().then(setProviders); }, []);
+
+  const handleOpen = async (p) => {
+    const newOpen = open === p.id ? null : p.id;
+    setOpen(newOpen);
+    if (!newOpen) return;
+    setLoadingId(p.id);
+
+    // Fetch this month + next month schedule and recent messages in parallel
+    const now = new Date();
+    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const [thisMonth, nextMonth, msgs] = await Promise.all([
+      fetchSchedule(now.getFullYear(), now.getMonth()),
+      fetchSchedule(nextMonthDate.getFullYear(), nextMonthDate.getMonth()),
+      fetchMessages(p.id, currentProvider?.id),
+    ]);
+
+    // Find upcoming call dates for this provider
+    const combined = { ...thisMonth, ...nextMonth };
+    const upcoming = Object.entries(combined)
+      .filter(([date, prov]) => prov?.id === p.id && date >= now.toISOString().split("T")[0])
+      .map(([date]) => date)
+      .sort()
+      .slice(0, 5);
+
+    setSchedules(prev => ({ ...prev, [p.id]: upcoming }));
+    setMessages(prev => ({ ...prev, [p.id]: (msgs || []).slice(0, 3) }));
+    setLoadingId(null);
+  };
+
+  const DAYS_SHORT = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
   return (
     <div style={{paddingBottom:20}}>
       <p style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text, marginBottom:12}}>Provider Directory</p>
       {providers.map(p => (
-        <div key={p.id} onClick={()=>setOpen(open===p.id?null:p.id)}
+        <div key={p.id} onClick={()=>handleOpen(p)}
           style={card({padding:"13px 16px", marginBottom:10, cursor:"pointer", borderLeft:`3px solid ${open===p.id?p.color:"transparent"}`})}>
           <div style={{display:"flex", alignItems:"center", gap:14}}>
             <Avatar p={p} size={46} ring/>
             <div style={{flex:1}}>
               <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{p.name}</p>
               <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{p.credentials}</p>
+              {p.no_call_day && (
+                <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:11, color:C.teal}}>
+                  No-call: {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][p.no_call_day] || p.no_call_day}s
+                </p>
+              )}
             </div>
             <span style={{color:C.greyMid, fontSize:18}}>{open===p.id?"∨":"›"}</span>
           </div>
+
           {open===p.id && (
-            <div style={{display:"flex", gap:10, marginTop:12, paddingTop:12, borderTop:`1px solid ${C.grey}`}}>
-              <button style={btnS({flex:1, padding:"9px", fontSize:13})} onClick={ev=>{ev.stopPropagation(); onMessage(p);}}>Message</button>
-              <button style={oBtnS({flex:1, padding:"9px", fontSize:13})} onClick={ev=>ev.stopPropagation()}>Switch Call</button>
+            <div onClick={ev=>ev.stopPropagation()} style={{marginTop:12, paddingTop:12, borderTop:`1px solid ${C.grey}`}}>
+              {loadingId===p.id
+                ? <p style={{fontFamily:ffb, fontSize:12, color:C.sub, textAlign:"center", padding:"8px 0"}}>Loading…</p>
+                : <>
+                  {/* Upcoming call dates */}
+                  <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:12, color:C.text}}>Upcoming Calls</p>
+                  {schedules[p.id]?.length > 0
+                    ? <div style={{display:"flex", flexWrap:"wrap", gap:6, marginBottom:12}}>
+                        {schedules[p.id].map(date => {
+                          const d = new Date(date + "T00:00:00");
+                          const isWeekend = d.getDay()===0||d.getDay()===6;
+                          return (
+                            <div key={date} style={{
+                              padding:"4px 10px", borderRadius:20,
+                              background: isWeekend ? "#fff0f0" : C.wave,
+                              border: `1px solid ${isWeekend ? "#f5c0c0" : C.teal+"44"}`,
+                              display:"flex", alignItems:"center", gap:5,
+                            }}>
+                              <span style={{fontFamily:ff, fontWeight:800, fontSize:11, color: isWeekend?"#c0392b":C.teal}}>
+                                {DAYS_SHORT[d.getDay()]}
+                              </span>
+                              <span style={{fontFamily:ffb, fontSize:11, color:C.text}}>
+                                {d.toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    : <p style={{fontFamily:ffb, fontSize:12, color:C.sub, marginBottom:12}}>No upcoming calls scheduled</p>
+                  }
+
+                  {/* No-call day */}
+                  {p.no_call_day && (
+                    <>
+                      <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:12, color:C.text}}>No-Call Day Preference</p>
+                      <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:12, padding:"7px 10px", borderRadius:8, background:C.wave, border:`1px solid ${C.teal}44`}}>
+                        <span style={{fontSize:14}}>🚫</span>
+                        <span style={{fontFamily:ffb, fontSize:12, color:C.text}}>
+                          {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][p.no_call_day] || p.no_call_day}s — approved recurring no-call day
+                        </span>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Recent messages */}
+                  <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:12, color:C.text}}>Recent Messages</p>
+                  {messages[p.id]?.length > 0
+                    ? <div style={{marginBottom:12}}>
+                        {messages[p.id].map((m,i) => (
+                          <div key={i} style={{padding:"6px 10px", borderRadius:8, marginBottom:4, background: m.sender_id===currentProvider?.id?"#f0faf8":"#f7f7f7"}}>
+                            <p style={{margin:0, fontFamily:ffb, fontSize:11, color:C.sub}}>
+                              {m.sender_id===currentProvider?.id ? "You" : p.name.replace("Dr. ","")} · {new Date(m.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+                            </p>
+                            <p style={{margin:"2px 0 0", fontFamily:ff, fontSize:12, color:C.text, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{m.text || m.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    : <p style={{fontFamily:ffb, fontSize:12, color:C.sub, marginBottom:12}}>No messages yet</p>
+                  }
+
+                  {/* Message button */}
+                  <button style={btnS({width:"100%", padding:"9px", fontSize:13})}
+                    onClick={()=>onMessage(p)}>
+                    Message {p.name.replace("Dr. ","")}
+                  </button>
+                </>
+              }
             </div>
           )}
         </div>

@@ -115,7 +115,7 @@ export default function App() {
     if (sub === "print")     return <PrintSchedulePage onBack={()=>setSub(null)}/>;
     if (sub === "settings")  return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider}/>;
     if (tab === "home")      return <HomePage/>;
-    if (tab === "providers") return <ProvidersPage onMessage={onMessage}/>;
+    if (tab === "providers") return <ProvidersPage onMessage={onMessage} currentProvider={currentProvider}/>;
     if (tab === "request")   return <RequestPage currentProvider={currentProvider}/>;
     if (tab === "more")      return <MorePage onNav={k=>setSub(k)} currentProvider={currentProvider}/>;
   }
