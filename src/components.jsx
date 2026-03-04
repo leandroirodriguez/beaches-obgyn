@@ -889,7 +889,7 @@ export function PrintSchedulePage({ onBack }) {
       for (let d = 1; d <= days; d++) cells.push(d);
       while (cells.length % 7 !== 0) cells.push(null);
       const numRows = Math.ceil(cells.length / 7);
-      const rowH = Math.floor(570 / numRows);
+      const rowH = Math.floor(540 / numRows);
 
       const cellsHtml = cells.map((d, i) => {
         if (!d) return `<div style="background:#fafafa;border-radius:4px;"></div>`;
@@ -920,7 +920,7 @@ export function PrintSchedulePage({ onBack }) {
         ? `<img src="${logoDataUrl}" style="height:34px;object-fit:contain;"/>`
         : `<span style="font-weight:900;font-size:15px;color:#1a8c78;">Beaches OBGYN</span>`;
 
-      return `<div style="width:100%;height:100vh;padding:18px 22px 14px;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;">
+      return `<div style="width:100%;height:100vh;padding:12px 18px 10px;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">
           ${logoHtml}
           <div style="text-align:right;">
