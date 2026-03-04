@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   C, MONTHS, WD_SHORT, WD_FULL,
   ff, ffb, dkey, getDays, getFirst,
@@ -862,6 +862,8 @@ export function PrintSchedulePage({ onBack }) {
     fetchProviders().then(setProviders);
   }, []);
 
+  const printFrameRef = useRef(null);
+
   const handlePrint = async () => {
     if (selectedMonths.length === 0) return;
     setLoading(true);
@@ -875,10 +877,8 @@ export function PrintSchedulePage({ onBack }) {
     results.forEach(({ year, month, data }) => {
       merged[`${year}-${month}`] = data;
     });
-    setSchedules(merged);
     setLoading(false);
 
-    // Build full HTML for a new print window
     const pagesHtml = selectedMonths.map(({ year, month }) => {
       const scheduleData = merged[`${year}-${month}`];
       const monthName = MONTHS[month];
@@ -900,7 +900,7 @@ export function PrintSchedulePage({ onBack }) {
         const avatarHtml = prov
           ? prov.avatar_url
             ? `<img src="${prov.avatar_url}" style="width:22px;height:22px;border-radius:50%;object-fit:cover;margin-bottom:2px;border:2px solid ${prov.color};display:block;"/>`
-            : `<div style="width:22px;height:22px;border-radius:50%;background:${prov.color};margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#fff;flex-shrink:0;">${prov.initials}</div>`
+            : `<div style="width:22px;height:22px;border-radius:50%;background:${prov.color};margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:900;color:#fff;">${prov.initials}</div>`
           : "";
         const nameHtml = prov ? `<span style="font-size:8px;font-weight:700;color:#333;line-height:1.2;">${prov.name.replace("Dr. ","")}</span>` : "";
         return `<div style="border:1px solid ${prov ? prov.color+"55" : "#e8e8e8"};border-top:3px solid ${prov ? prov.color : "#e8e8e8"};border-radius:4px;padding:3px 4px;background:${isWeekend?"#fdf8f8":"#fff"};display:flex;flex-direction:column;overflow:hidden;">
@@ -920,7 +920,7 @@ export function PrintSchedulePage({ onBack }) {
         ? `<img src="${logoDataUrl}" style="height:34px;object-fit:contain;"/>`
         : `<span style="font-weight:900;font-size:15px;color:#1a8c78;">Beaches OBGYN</span>`;
 
-      return `<div style="width:1070px;height:780px;padding:18px 22px 14px;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;">
+      return `<div style="width:100%;height:100vh;padding:18px 22px 14px;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">
           ${logoHtml}
           <div style="text-align:right;">
@@ -942,19 +942,20 @@ export function PrintSchedulePage({ onBack }) {
       </div>`;
     }).join("");
 
-    const win = window.open("", "_blank", "width=1120,height=820");
-    win.document.write(`<!DOCTYPE html><html><head><title>Call Schedule</title>
+    const html = `<!DOCTYPE html><html><head><title>Call Schedule</title>
       <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: -apple-system, sans-serif; }
-        body { background: #fff; }
-        @page { size: 11in 8.5in landscape; margin: 0; }
-        @media print {
-          body { width: 11in; }
-          @page { size: 11in 8.5in landscape; margin: 0; }
-        }
+        * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system,sans-serif; }
+        body { background:#fff; }
+        @page { size:11in 8.5in landscape; margin:0; }
       </style>
-    </head><body>${pagesHtml}<script>window.onload=function(){window.print();}<\/script></body></html>`);
-    win.document.close();
+    </head><body>${pagesHtml}</body></html>`;
+
+    const frame = printFrameRef.current;
+    frame.srcdoc = html;
+    frame.onload = () => {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    };
   };
 
   const renderCalendar = (year, month, scheduleData) => {
@@ -1051,6 +1052,7 @@ export function PrintSchedulePage({ onBack }) {
 
   return (
       <div style={{ paddingBottom: 20 }}>
+        <iframe ref={printFrameRef} style={{ display: "none" }} title="print-frame" />
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.primary }}>‹</button>
           <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 16, color: C.text }}>Print Schedule</span>
