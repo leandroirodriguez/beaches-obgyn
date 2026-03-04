@@ -1583,7 +1583,7 @@ export function AdminPage({ onBack }) {
       return;
     }
 
-    // Build suggestions for each conflict
+    // Build suggestions for each conflict, sorted by fairness
     const allReqs = await fetchRequests();
     const otherApproved = allReqs.filter(r => r.status === "Approved" && r.id !== id);
 
@@ -1594,14 +1594,43 @@ export function AdminPage({ onBack }) {
         return dateStr >= r.start_date && dateStr <= r.end_date;
       });
 
-    // Also block the requesting provider
+    // Fetch full call history to rank by fairness
+    const allScheduleData = {};
+    for (const { date } of conflictDates) {
+      const d = new Date(date + "T00:00:00");
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!allScheduleData[key]) {
+        const data = await fetchSchedule(d.getFullYear(), d.getMonth());
+        Object.assign(allScheduleData, data);
+      }
+    }
+
+    // Count calls per provider from history
+    const callCounts = {};
+    const lastCallDate = {};
+    for (const p of allProviders) { callCounts[p.email] = 0; lastCallDate[p.email] = null; }
+    for (const [date, prov] of Object.entries(allScheduleData)) {
+      const email = prov?.email;
+      if (!email || callCounts[email] === undefined) continue;
+      callCounts[email]++;
+      if (!lastCallDate[email] || date > lastCallDate[email]) lastCallDate[email] = date;
+    }
+
     const requesterEmail = req.providers?.email;
 
     const conflicts = conflictDates.map(({ date, currentProv }) => {
-      const available = allProviders.filter(p =>
-        p.email !== requesterEmail &&
-        !isProvBlocked(p.email, date)
-      );
+      const available = allProviders
+        .filter(p => p.email !== requesterEmail && !isProvBlocked(p.email, date))
+        .sort((a, b) => {
+          // Sort by fewest calls first, then most rested
+          if (callCounts[a.email] !== callCounts[b.email])
+            return callCounts[a.email] - callCounts[b.email];
+          const lastA = lastCallDate[a.email];
+          const lastB = lastCallDate[b.email];
+          if (!lastA) return -1;
+          if (!lastB) return 1;
+          return lastA < lastB ? -1 : 1; // most rested (oldest last call) first
+        });
       return { date, currentProv, suggestions: available, blocked: available.length === 0 };
     });
 
