@@ -862,6 +862,8 @@ export function PrintSchedulePage({ onBack }) {
     fetchProviders().then(setProviders);
   }, []);
 
+  const printFrameRef = useRef(null);
+
   const handlePrint = async () => {
     if (selectedMonths.length === 0) return;
     setLoading(true);
@@ -918,40 +920,42 @@ export function PrintSchedulePage({ onBack }) {
         ? `<img src="${logoDataUrl}" style="height:32px;object-fit:contain;"/>`
         : `<span style="font-weight:900;font-size:14px;color:#1a8c78;">Beaches OBGYN</span>`;
 
-      return `
-        <div style="width:277mm;height:190mm;padding:8mm 10mm;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4mm;border-bottom:2px solid #1a8c78;padding-bottom:3mm;flex-shrink:0;">
-            ${logoHtml}
-            <div style="text-align:right;">
-              <div style="font-size:16px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div>
-              <div style="font-size:8px;color:#888;">Call Schedule</div>
-            </div>
+      return `<div style="width:100%;height:100vh;padding:12px 18px 10px;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;overflow:hidden;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">
+          ${logoHtml}
+          <div style="text-align:right;">
+            <div style="font-size:16px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div>
+            <div style="font-size:8px;color:#888;">Call Schedule</div>
           </div>
-          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">
-            ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>
-              `<div style="text-align:center;padding:2px 0;font-size:8px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`
-            ).join("")}
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},${rowH}px);gap:2px;flex:1;overflow:hidden;">
-            ${cellsHtml}
-          </div>
-          <div style="margin-top:3mm;padding-top:2mm;border-top:1px solid #e8e8e8;display:flex;flex-wrap:wrap;gap:2px 10px;flex-shrink:0;">
-            ${legendHtml}
-          </div>
-        </div>`;
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">
+          ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>
+            `<div style="text-align:center;padding:2px 0;font-size:8px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`
+          ).join("")}
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},${rowH}px);gap:2px;flex:1;overflow:hidden;">
+          ${cellsHtml}
+        </div>
+        <div style="margin-top:4px;padding-top:4px;border-top:1px solid #e8e8e8;display:flex;flex-wrap:wrap;gap:2px 10px;flex-shrink:0;">
+          ${legendHtml}
+        </div>
+      </div>`;
     }).join("");
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Call Schedule</title>
       <style>
         * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system,Helvetica,sans-serif; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
         body { background:#fff; }
-        @page { size: A4 landscape; margin: 0; }
+        @page { size:11in 8.5in landscape; margin:0; }
       </style>
     </head><body>${pagesHtml}</body></html>`;
 
-    const blob = new Blob([html], { type: "text/html" });
-    const url = URL.createObjectURL(blob);
-    window.location.href = url;
+    const frame = printFrameRef.current;
+    frame.srcdoc = html;
+    frame.onload = () => {
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    };
   };
 
   const renderCalendar = (year, month, scheduleData) => {
@@ -1048,6 +1052,7 @@ export function PrintSchedulePage({ onBack }) {
 
   return (
       <div style={{ paddingBottom: 20 }}>
+        <iframe ref={printFrameRef} style={{ display: "none" }} title="print-frame" />
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
           <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.primary }}>‹</button>
           <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 16, color: C.text }}>Print Schedule</span>
@@ -1282,16 +1287,32 @@ function AIScheduleGenerator() {
       const monthsToGenerate = bulk ? bulkMonths : [{ year, month }];
       const summaries = [];
 
+      // Fetch full history — all months from 12 months back up to current
+      const now = new Date();
+      const historyMonths = [];
+      for (let i = 12; i >= 1; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        historyMonths.push({ year: d.getFullYear(), month: d.getMonth() });
+      }
+      const historyResults = await Promise.all(
+        historyMonths.map(({ year: hy, month: hm }) => fetchSchedule(hy, hm))
+      );
+      // Merge all history into one big schedule map
+      const fullHistory = {};
+      historyResults.forEach(data => Object.assign(fullHistory, data));
+
       for (const { year: y, month: m } of monthsToGenerate) {
-        const previousSchedule = await fetchSchedule(m === 0 ? y - 1 : y, m === 0 ? 11 : m - 1);
+        // Also include any months already generated in this bulk run
+        const previousSchedule = { ...fullHistory };
         const result = await generateSchedule({ providers, requests, year: y, month: m, previousSchedule });
         await saveGeneratedSchedule(result.schedule, providers, y, m);
+        // Add this month to history for next iteration in bulk mode
+        const savedData = await fetchSchedule(y, m);
+        Object.assign(fullHistory, savedData);
         summaries.push(`${MONTHS[m]} ${y}: ${result.summary}`);
-        // Update completeness live as each month finishes
-        const newData = await fetchSchedule(y, m);
         setCompleteMonths(prev => ({
           ...prev,
-          [`${y}-${m}`]: isMonthComplete(newData, y, m),
+          [`${y}-${m}`]: isMonthComplete(savedData, y, m),
         }));
       }
 
