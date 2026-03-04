@@ -1150,9 +1150,8 @@ function isMonthComplete(scheduleData, year, month) {
   const total = daysInMonth(year, month);
   const today = new Date();
   const isCurrentMonth = today.getFullYear() === year && today.getMonth() === month;
-  const isPastMonth = year < today.getFullYear() || (year === today.getFullYear() && month < today.getMonth());
 
-  // Find the first day that has a scheduled entry
+  // Find the first scheduled day
   let firstScheduledDay = null;
   for (let d = 1; d <= total; d++) {
     const key = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
@@ -1160,14 +1159,14 @@ function isMonthComplete(scheduleData, year, month) {
   }
   if (!firstScheduledDay) return false;
 
-  // Check all days from first scheduled day onward
-  // For current month, only check up to today
-  const checkUntil = isCurrentMonth ? Math.min(total, today.getDate()) : total;
+  // For current month: only check from first scheduled day up to today
+  // For all other months: check every day from first scheduled day to end of month
+  const checkFrom = firstScheduledDay;
+  const checkUntil = isCurrentMonth ? today.getDate() : total;
 
-  for (let d = firstScheduledDay; d <= checkUntil; d++) {
-    const date = new Date(year, month, d);
-    const dow = date.getDay();
-    if (dow === 0) continue; // Sundays mirror Saturday, skip
+  for (let d = checkFrom; d <= checkUntil; d++) {
+    const dow = new Date(year, month, d).getDay();
+    if (dow === 0) continue; // Sundays mirror Saturday
     const key = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
     if (!scheduleData[key]) return false;
   }
