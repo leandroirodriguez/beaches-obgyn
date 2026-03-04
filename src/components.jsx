@@ -1665,11 +1665,16 @@ export function AdminPage({ onBack }) {
         return dateStr >= r.start_date && dateStr <= r.end_date;
       });
 
-    // Fetch full call history across all months to rank by fairness
+    // Fetch full call history across ALL months including current
     const now = new Date();
     const historyFetches = [];
     for (let i = 0; i <= 12; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      historyFetches.push(fetchSchedule(d.getFullYear(), d.getMonth()));
+    }
+    // Also fetch future months that may have been generated
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
       historyFetches.push(fetchSchedule(d.getFullYear(), d.getMonth()));
     }
     const historyResults = await Promise.all(historyFetches);
@@ -1691,47 +1696,59 @@ export function AdminPage({ onBack }) {
 
     const requesterEmail = req.providers?.email;
 
+    // Build a map of email -> sorted list of all their call dates from full schedule
+    const providerCallDates = {};
+    for (const p of allProviders) providerCallDates[p.email] = [];
+    for (const [date, prov] of Object.entries(allScheduleData)) {
+      const email = prov?.email;
+      if (email && providerCallDates[email]) providerCallDates[email].push(date);
+    }
+    for (const email of Object.keys(providerCallDates)) {
+      providerCallDates[email].sort();
+    }
+
+    // Check if assigning a provider to a date would violate 3-day gap
+    const hasGapConflict = (email, dateStr) => {
+      const dates = providerCallDates[email];
+      for (const d of dates) {
+        const gap = Math.abs(Math.floor((new Date(dateStr + "T00:00:00") - new Date(d + "T00:00:00")) / 86400000));
+        if (gap > 0 && gap <= 3) return true;
+      }
+      return false;
+    };
+
     // Build conflicts one by one, updating counts as we go
     const sessionCounts = { ...callCounts };
-    const sessionLastDate = { ...lastCallDate };
 
     const conflicts = conflictDates.map(({ date, currentProv }) => {
-      const available = allProviders
-        .filter(p => {
-          if (p.email === requesterEmail) return false;
-          if (isProvBlocked(p.email, date)) return false;
-          // Enforce 3-day gap from their last call
-          const last = sessionLastDate[p.email];
-          if (last) {
-            const gap = Math.floor((new Date(date + "T00:00:00") - new Date(last + "T00:00:00")) / 86400000);
-            if (gap <= 3) return false;
-          }
-          return true;
-        })
-        .sort((a, b) => {
-          if (sessionCounts[a.email] !== sessionCounts[b.email])
-            return sessionCounts[a.email] - sessionCounts[b.email];
-          const lastA = sessionLastDate[a.email];
-          const lastB = sessionLastDate[b.email];
-          if (!lastA) return -1;
-          if (!lastB) return 1;
-          return lastA < lastB ? -1 : 1;
-        });
+      // Primary list: eligible with gap check
+      const eligible = allProviders.filter(p => {
+        if (p.email === requesterEmail) return false;
+        if (isProvBlocked(p.email, date)) return false;
+        if (hasGapConflict(p.email, date)) return false;
+        return true;
+      }).sort((a, b) => sessionCounts[a.email] - sessionCounts[b.email]);
 
-      // If no one passes gap check, fall back without gap constraint
-      const fallback = available.length === 0
-        ? allProviders
-            .filter(p => p.email !== requesterEmail && !isProvBlocked(p.email, date))
-            .sort((a, b) => sessionCounts[a.email] - sessionCounts[b.email])
-        : available;
+      // Fallback: ignore gap if no one eligible
+      const fallback = eligible.length > 0 ? eligible : allProviders
+        .filter(p => p.email !== requesterEmail && !isProvBlocked(p.email, date))
+        .sort((a, b) => sessionCounts[a.email] - sessionCounts[b.email]);
 
-      // Pre-increment top suggestion so next date considers them more loaded
+      // Show all providers sorted (eligible first, then rest) so admin can still pick anyone
+      const eligibleEmails = new Set(eligible.map(p => p.email));
+      const ineligible = allProviders
+        .filter(p => p.email !== requesterEmail && !isProvBlocked(p.email, date) && !eligibleEmails.has(p.email))
+        .sort((a, b) => sessionCounts[a.email] - sessionCounts[b.email]);
+      const suggestions = [...eligible, ...ineligible];
+
+      // Pre-increment top suggestion and add date to their call list
       if (fallback.length > 0) {
         sessionCounts[fallback[0].email]++;
-        sessionLastDate[fallback[0].email] = date;
+        providerCallDates[fallback[0].email].push(date);
+        providerCallDates[fallback[0].email].sort();
       }
 
-      return { date, currentProv, suggestions: fallback, blocked: fallback.length === 0 };
+      return { date, currentProv, suggestions, blocked: suggestions.length === 0 };
     });
 
     const hardBlocked = conflicts.filter(c => c.blocked).map(c => c.date);
