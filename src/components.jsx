@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
-git commit -m "fix print new window build error"
-git push
+
 Days, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
