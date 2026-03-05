@@ -149,6 +149,7 @@ export async function updateNoCallDayStatus(requestId, status, providerId, day) 
   }
   return !error;
 }
+
 export async function uploadAvatar(providerId, file) {
   const ext = file.name.split(".").pop();
   const path = `avatars/${providerId}.${ext}`;
@@ -157,7 +158,6 @@ export async function uploadAvatar(providerId, file) {
     .upload(path, file, { upsert: true, contentType: file.type });
   if (uploadError) { console.error("uploadAvatar:", uploadError); return null; }
   const { data } = supabase.storage.from("provider-avatars").getPublicUrl(path);
-  // Add cache-busting so new photo shows immediately
   const url = `${data.publicUrl}?t=${Date.now()}`;
   const { error: updateError } = await supabase
     .from("providers")
@@ -166,6 +166,8 @@ export async function uploadAvatar(providerId, file) {
   if (updateError) { console.error("updateAvatar:", updateError); return null; }
   return url;
 }
+
+export async function updateScheduleDate(date, providerEmail) {
   const { data: provData } = await supabase
     .from("providers")
     .select("id")
