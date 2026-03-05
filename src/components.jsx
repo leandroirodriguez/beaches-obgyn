@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -782,19 +782,43 @@ export function RequestPage({ currentProvider }) {
                     {r.providers?.name}
                   </p>
                   <p style={{ margin: "2px 0 0", fontFamily: ffb, fontSize: 11, color: C.sub }}>
-                    Wants to switch call on {new Date(r.start_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" })}
+                    Wants to swap calls
                   </p>
+                </div>
+              </div>
+              <div style={{ background: C.wave, borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ textAlign: "center" }}>
+                    <p style={{ margin: 0, fontFamily: ffb, fontSize: 10, color: C.sub, textTransform: "uppercase" }}>They give up</p>
+                    <p style={{ margin: "3px 0 0", fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>
+                      {new Date(r.start_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    </p>
+                  </div>
+                  <span style={{ fontSize: 18, color: C.teal }}>⇄</span>
+                  <div style={{ textAlign: "center" }}>
+                    <p style={{ margin: 0, fontFamily: ffb, fontSize: 10, color: C.sub, textTransform: "uppercase" }}>You give up</p>
+                    <p style={{ margin: "3px 0 0", fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>
+                      {new Date(r.end_date + "T00:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                    </p>
+                  </div>
                 </div>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button
                   style={btnS({ flex: 1, padding: "9px", fontSize: 12, background: "#65b896" })}
                   onClick={async () => {
-                    await updateRequestStatus(r.id, "Approved");
-                    fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
+                    // Execute the actual schedule swap
+                    const ok = await executeCallSwitch(
+                      r.id,
+                      r.provider_id,        // requester's provider ID
+                      currentProvider.id,   // target (me) provider ID
+                      r.start_date,         // requester's date (they give up)
+                      r.end_date            // my date (I give up)
+                    );
+                    if (ok) fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
                   }}
                 >
-                  Accept
+                  Accept Swap
                 </button>
                 <button
                   style={btnS({ flex: 1, padding: "9px", fontSize: 12, background: C.coral })}
@@ -819,12 +843,18 @@ export function RequestPage({ currentProvider }) {
         )}
         {activeReqs.map(r => {
           const canCancel = new Date(r.start_date) > new Date();
+          const isSwitch = r.type === "Call Switch";
           return (
             <div key={r.id} style={card({ padding: "13px 16px", marginBottom: 10 })}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: canCancel ? 10 : 0 }}>
-                <div>
+                <div style={{ flex: 1 }}>
                   <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 14, color: C.text }}>{r.type}</p>
-                  <p style={{ margin: "3px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>{r.start_date} → {r.end_date}</p>
+                  {isSwitch
+                    ? <p style={{ margin: "3px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>
+                        You give up {r.start_date} · You take {r.end_date}
+                      </p>
+                    : <p style={{ margin: "3px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>{r.start_date} → {r.end_date}</p>
+                  }
                 </div>
                 <span style={badge(r.status)}>{r.status}</span>
               </div>

@@ -169,7 +169,39 @@ export async function uploadAvatar(providerId, file) {
   return `${cleanUrl}?t=${Date.now()}`;
 }
 
-export async function updateScheduleDate(date, providerEmail) {
+export async function executeCallSwitch(requestId, requesterProviderId, targetProviderId, requesterDate, targetDate) {
+  // Swap the two dates in the schedule
+  const { error: e1 } = await supabase
+    .from("call_schedule")
+    .update({ provider_id: targetProviderId })
+    .eq("date", requesterDate);
+  if (e1) { console.error("executeCallSwitch e1:", e1); return false; }
+
+  const { error: e2 } = await supabase
+    .from("call_schedule")
+    .update({ provider_id: requesterProviderId })
+    .eq("date", targetDate);
+  if (e2) { console.error("executeCallSwitch e2:", e2); return false; }
+
+  // If either date is a Saturday, mirror to Sunday
+  for (const [date, providerId] of [[requesterDate, targetProviderId], [targetDate, requesterProviderId]]) {
+    const d = new Date(date + "T00:00:00");
+    if (d.getDay() === 6) {
+      const sun = new Date(d);
+      sun.setDate(sun.getDate() + 1);
+      const sunStr = `${sun.getFullYear()}-${String(sun.getMonth()+1).padStart(2,"0")}-${String(sun.getDate()).padStart(2,"0")}`;
+      await supabase.from("call_schedule").update({ provider_id: providerId }).eq("date", sunStr);
+    }
+  }
+
+  // Mark request as Approved
+  const { error: e3 } = await supabase.from("requests").update({ status: "Approved" }).eq("id", requestId);
+  if (e3) { console.error("executeCallSwitch e3:", e3); return false; }
+
+  return true;
+}
+
+
   const { data: provData } = await supabase
     .from("providers")
     .select("id")
