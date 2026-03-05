@@ -533,12 +533,15 @@ export function RequestPage({ currentProvider }) {
     setLoading(false);
   };
 
+  const today = new Date().toISOString().split("T")[0];
+  const activeReqs = myReqs.filter(r => !r.end_date || r.end_date >= today);
+
   return (
     <div style={{ paddingBottom: 20 }}>
       <div style={{ display: "flex", background: "#FFF", borderRadius: 8, padding: 3, marginBottom: 16, border: `1px solid ${C.grey}` }}>
         {[
           ["new",    "New Request"],
-          ["mine",   `My Requests (${myReqs.length})`],
+          ["mine",   `My Requests (${activeReqs.length})`],
           ["nocall", "No-Call Day"],
         ].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{
@@ -805,12 +808,12 @@ export function RequestPage({ currentProvider }) {
         </>}
 
         {/* My outgoing requests */}
-        {myReqs.length === 0 && incomingSwitch.length === 0 && (
+        {activeReqs.length === 0 && incomingSwitch.length === 0 && (
           <div style={card({ padding: "20px", textAlign: "center" })}>
             <p style={{ fontFamily: ff, fontSize: 13, color: C.sub, margin: 0 }}>No requests yet</p>
           </div>
         )}
-        {myReqs.map(r => {
+        {activeReqs.map(r => {
           const canCancel = new Date(r.start_date) > new Date();
           return (
             <div key={r.id} style={card({ padding: "13px 16px", marginBottom: 10 })}>
@@ -1956,9 +1959,12 @@ export function AdminPage({ onBack }) {
         ))}
       </div>
 
-      {tab === "requests" && <>
-        {reqs.length === 0 && <div style={card({padding:"20px", textAlign:"center"})}><p style={{fontFamily:ff, fontSize:13, color:C.sub}}>No requests yet</p></div>}
-        {reqs.map(r => (
+      {tab === "requests" && (() => {
+        const today = new Date().toISOString().split("T")[0];
+        const activeReqs = reqs.filter(r => !r.end_date || r.end_date >= today);
+        return <>
+          {activeReqs.length === 0 && <div style={card({padding:"20px", textAlign:"center"})}><p style={{fontFamily:ff, fontSize:13, color:C.sub}}>No requests yet</p></div>}
+          {activeReqs.map(r => (
           <div key={r.id} style={card({padding:"13px 16px", marginBottom:10})}>
             <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:r.status==="Pending"?10:0}}>
               {r.providers && <Avatar p={r.providers} size={36}/>}
@@ -1977,7 +1983,7 @@ export function AdminPage({ onBack }) {
           </div>
         ))}
         <AIScheduleGenerator/>
-      </>}
+      </>; })()}
 
       {tab === "nocall" && <>
         {noCallReqs.length === 0 && (
