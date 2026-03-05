@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -2260,9 +2260,12 @@ export function SettingsPage({ onBack, onLogout, currentProvider, onProviderUpda
     const url = await uploadAvatar(currentProvider.id, file);
     if (url) {
       setAvatarUrl(url);
-      onProviderUpdate?.({ ...currentProvider, avatar_url: url });
+      // Re-fetch from DB to get authoritative record with new avatar_url
+      const refreshed = await fetchCurrentProvider(currentProvider.email);
+      onProviderUpdate?.(refreshed || { ...currentProvider, avatar_url: url });
     }
     setUploading(false);
+    e.target.value = "";
   };
 
   return (
