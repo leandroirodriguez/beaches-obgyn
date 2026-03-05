@@ -54,6 +54,28 @@ export default async function handler(req, res) {
   console.log("[generate-schedule] Weekend counts going in:", 
     providers.map(p => `${p.name.replace("Dr. ","")}: ${hist[p.email].weekends}`).join(", "));
 
+  // ── Normalize new providers to group average ──────────────────────────────
+  // A provider with 0 history in a group where others have many months
+  // would get overloaded trying to "catch up". Instead, set their counts
+  // to the group average so they're treated as equal peers.
+  const providersWithHistory = providers.filter(p => hist[p.email].total > 0);
+  if (providersWithHistory.length > 0) {
+    const avgTotal    = Math.round(providersWithHistory.reduce((s, p) => s + hist[p.email].total, 0) / providersWithHistory.length);
+    const avgWeekends = Math.round(providersWithHistory.reduce((s, p) => s + hist[p.email].weekends, 0) / providersWithHistory.length);
+    const avgFridays  = Math.round(providersWithHistory.reduce((s, p) => s + hist[p.email].fridays, 0) / providersWithHistory.length);
+    const avgWeekdays = Math.round(providersWithHistory.reduce((s, p) => s + hist[p.email].weekdays, 0) / providersWithHistory.length);
+
+    for (const p of providers) {
+      if (hist[p.email].total === 0) {
+        hist[p.email].total    = avgTotal;
+        hist[p.email].weekends = avgWeekends;
+        hist[p.email].fridays  = avgFridays;
+        hist[p.email].weekdays = avgWeekdays;
+        console.log(`[generate-schedule] Normalized new provider ${p.name} to group average (total: ${avgTotal})`);
+      }
+    }
+  }
+
   // Build all dates (no Sundays)
   const allDates = [];
   for (let d = 1; d <= daysInMonth; d++) {
