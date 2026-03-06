@@ -151,7 +151,9 @@ export default function App() {
 
   // Listen for notification tap navigation from service worker
   useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
     const handler = (event) => {
+      console.log("SW message received:", event.data);
       if (event.data?.type === "NOTIF_NAV") {
         const action = event.data.action;
         if (action === "admin-requests") { setSub("admin"); }
@@ -160,9 +162,9 @@ export default function App() {
         else if (action === "home") { setSub(null); setTab("home"); }
       }
     };
-    navigator.serviceWorker?.addEventListener("message", handler);
-    return () => navigator.serviceWorker?.removeEventListener("message", handler);
-  }, []);
+    navigator.serviceWorker.addEventListener("message", handler);
+    return () => navigator.serviceWorker.removeEventListener("message", handler);
+  }, [setSub, setTab]);
 
   // Handle ?action= param when app opens fresh from notification tap
   useEffect(() => {
