@@ -1131,23 +1131,34 @@ export function PrintSchedulePage({ onBack }) {
       </style>
     </head><body>${pagesHtml}</body></html>`;
 
-    const newTab = window.open("", "_blank");
-    if (!newTab) {
-      alert("Please allow popups for this site to print schedules.");
-      return;
-    }
-    newTab.document.open();
-    newTab.document.write(html);
-    newTab.document.close();
-    // Wait for content to load then print
-    newTab.onload = () => {
-      newTab.focus();
-      newTab.print();
-    };
-    // Fallback for browsers that don't fire onload on document.write
+    // iOS PWA: inject into a hidden iframe and print from it
+    const existingFrame = document.getElementById("print-frame");
+    if (existingFrame) existingFrame.remove();
+
+    const iframe = document.createElement("iframe");
+    iframe.id = "print-frame";
+    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;";
+    document.body.appendChild(iframe);
+
+    iframe.contentDocument.open();
+    iframe.contentDocument.write(html);
+    iframe.contentDocument.close();
+
     setTimeout(() => {
-      try { newTab.focus(); newTab.print(); } catch(e) {}
-    }, 800);
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch(e) {
+        // Fallback for browsers that block iframe printing
+        const newTab = window.open("", "_blank");
+        if (newTab) {
+          newTab.document.open();
+          newTab.document.write(html);
+          newTab.document.close();
+          setTimeout(() => { try { newTab.print(); } catch(e2) {} }, 800);
+        }
+      }
+    }, 600);
   };
 
   const renderCalendar = (year, month, scheduleData) => {
