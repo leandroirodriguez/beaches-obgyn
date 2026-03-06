@@ -244,6 +244,14 @@ export async function createNotification({ providerId, title, body }) {
   return !error;
 }
 
+export async function updateProviderPrefs(providerId, prefs) {
+  const { error } = await supabase
+    .from("providers")
+    .update({ notif_prefs: prefs })
+    .eq("id", providerId);
+  if (error) console.error("updateProviderPrefs:", error);
+  return !error;
+}
 
 export async function registerPushSubscription(providerId, subscription) {
   const { endpoint, keys: { p256dh, auth } } = subscription.toJSON();
@@ -255,18 +263,33 @@ export async function registerPushSubscription(providerId, subscription) {
   return !error;
 }
 
-export async function sendPushNotification({ providerIds, title, body, data = {} }) {
+export async function sendPushNotification({ providerIds, title, body, data = {}, notifKey = null }) {
   try {
+    // Filter out providers who have disabled this notification type
+    let filteredIds = providerIds;
+    if (notifKey) {
+      const { data: provs } = await supabase.from("providers").select("id, notif_prefs").in("id", providerIds);
+      if (provs) {
+        filteredIds = provs
+          .filter(p => {
+            const prefs = p.notif_prefs || {};
+            if (prefs.all === false) return false;
+            if (notifKey && prefs[notifKey] === false) return false;
+            return true;
+          })
+          .map(p => p.id);
+      }
+    }
+    if (filteredIds.length === 0) return;
     // Save in-app notification for each provider
-    await Promise.all(providerIds.map(id => createNotification({ providerId: id, title, body })));
+    await Promise.all(filteredIds.map(id => createNotification({ providerId: id, title, body })));
     // Send push
     await fetch("/api/send-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ providerIds, title, body, data }),
+      body: JSON.stringify({ providerIds: filteredIds, title, body, data }),
     });
   } catch (err) {
     console.error("sendPushNotification:", err);
   }
 }
-

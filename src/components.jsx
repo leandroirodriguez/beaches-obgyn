@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -467,6 +467,7 @@ export function RequestPage({ currentProvider }) {
           title: "New Time-Off Request",
           body: `${currentProvider.name} requested ${type} from ${start} to ${end}`,
           data: { action: "admin-requests" },
+          notifKey: "changes",
         });
       }
       setTimeout(() => setDone(false), 2500);
@@ -554,6 +555,7 @@ export function RequestPage({ currentProvider }) {
           title: "Call Switch Request",
           body: `${currentProvider.name} wants to swap their call on ${switchDate} with yours on ${switchToDate}`,
           data: { action: "my-requests" },
+          notifKey: "changes",
         });
       }
       setTimeout(() => setDone(false), 2500);
@@ -846,6 +848,7 @@ export function RequestPage({ currentProvider }) {
                         title: "Call Switch Accepted ✓",
                         body: `${currentProvider.name} accepted your switch request`,
                         data: { action: "my-requests" },
+                        notifKey: "changes",
                       });
                     }
                   }}
@@ -863,6 +866,7 @@ export function RequestPage({ currentProvider }) {
                       title: "Call Switch Declined",
                       body: `${currentProvider.name} declined your switch request`,
                       data: { action: "my-requests" },
+                      notifKey: "changes",
                     });
                   }}
                 >
@@ -1564,6 +1568,7 @@ function AIScheduleGenerator() {
         title: "Schedule Published 📅",
         body: `The call schedule for ${monthNames} is now available`,
         data: { action: "home" },
+        notifKey: "published",
       });
     } catch(err) {
       setError("Something went wrong. Please try again.");
@@ -1818,6 +1823,7 @@ export function AdminPage({ onBack }) {
           title: "Request Update",
           body: `Your ${req.type} request from ${req.start_date} to ${req.end_date} was denied`,
           data: { action: "my-requests" },
+          notifKey: "changes",
         });
       }
       return;
@@ -1990,6 +1996,7 @@ export function AdminPage({ onBack }) {
         title: "Request Approved ✓",
         body: `Your ${req.type} request from ${req.start_date} to ${req.end_date} was approved`,
         data: { action: "my-requests" },
+        notifKey: "changes",
       });
     }
 
@@ -2307,6 +2314,7 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
         title: `Message from ${currentProvider.name}`,
         body: txt.trim().length > 60 ? txt.trim().slice(0, 60) + "…" : txt.trim(),
         data: { action: "messages", senderId: currentProvider.id },
+        notifKey: "messages",
       });
     }
     setTxt("");
@@ -2423,9 +2431,29 @@ export function NotificationsPage({ onBack, currentProvider, onNavigate }) {
 }
 
 export function SettingsPage({ onBack, onLogout, currentProvider }) {
+  const defaultPrefs = {all:true, published:true, changes:true, messages:true};
   const [faceId, setFaceId] = useState(true);
-  const [notifs, setNotifs] = useState({all:true, published:true, changes:true, messages:true});
+  const [notifs, setNotifs] = useState(defaultPrefs);
   const [showPwForm, setShowPwForm] = useState(false);
+
+  useEffect(() => {
+    if (currentProvider?.notif_prefs) {
+      setNotifs({ ...defaultPrefs, ...currentProvider.notif_prefs });
+    }
+  }, [currentProvider]);
+
+  const handleToggleNotif = (key, val) => {
+    const updated = { ...notifs, [key]: val };
+    // If "all" turned off, turn off everything
+    if (key === "all" && !val) {
+      const allOff = { all: false, published: false, changes: false, messages: false };
+      setNotifs(allOff);
+      if (currentProvider) updateProviderPrefs(currentProvider.id, allOff);
+      return;
+    }
+    setNotifs(updated);
+    if (currentProvider) updateProviderPrefs(currentProvider.id, updated);
+  };
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
@@ -2505,7 +2533,7 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
         {[["all","All Notifications"],["published","Schedule Published"],["changes","Schedule Changes"],["messages","Messages"]].map(([k,l]) => (
           <div key={k} style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14}}>
             <span style={{fontFamily:ff, fontWeight:700, fontSize:13, color:C.text}}>{l}</span>
-            <Toggle val={notifs[k]} fn={v=>setNotifs(n=>({...n,[k]:v}))}/>
+            <Toggle val={notifs[k]} fn={v => handleToggleNotif(k, v)}/>
           </div>
         ))}
       </div>
