@@ -214,3 +214,27 @@ export async function updateScheduleDate(date, providerEmail) {
   if (error) console.error("updateScheduleDate:", error);
   return !error;
 }
+
+// ── Push Notifications ────────────────────────────────────────────────────────
+
+export async function registerPushSubscription(providerId, subscription) {
+  const { endpoint, keys: { p256dh, auth } } = subscription.toJSON();
+  const { error } = await supabase.from("push_subscriptions").upsert(
+    { provider_id: providerId, endpoint, p256dh, auth },
+    { onConflict: "endpoint" }
+  );
+  if (error) console.error("registerPushSubscription:", error);
+  return !error;
+}
+
+export async function sendPushNotification({ providerIds, title, body, data = {} }) {
+  try {
+    await fetch("/api/send-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providerIds, title, body, data }),
+    });
+  } catch (err) {
+    console.error("sendPushNotification:", err);
+  }
+}

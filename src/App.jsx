@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import logoSrc from "./assets/logo.png";
 import { C, ff, ffb, btnS, card, inpS, lblS } from "./data";
 import { supabase } from "./supabase";
-import { fetchCurrentProvider } from "./api";
+import { fetchCurrentProvider, registerPushSubscription } from "./api";
 import {
   IcoHome, IcoProviders, IcoRequest, IcoMore,
   Header,
@@ -121,6 +121,23 @@ function SetPasswordPage({ onDone }) {
 }
 
 
+async function registerPush(providerId) {
+  try {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    const reg = await navigator.serviceWorker.register("/sw.js");
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") return;
+    const existing = await reg.pushManager.getSubscription();
+    const sub = existing || await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: import.meta.env.VITE_VAPID_PUBLIC_KEY,
+    });
+    await registerPushSubscription(providerId, sub);
+  } catch (err) {
+    console.error("registerPush:", err);
+  }
+}
+
 export default function App() {
   const [session, setSession]                 = useState(null);
   const [authLoading, setAuthLoading]         = useState(true);
@@ -141,14 +158,20 @@ export default function App() {
       setSession(session);
       setAuthLoading(false);
       if (session?.user?.email) {
-        fetchCurrentProvider(session.user.email).then(setCurrentProvider);
+        fetchCurrentProvider(session.user.email).then(provider => {
+          setCurrentProvider(provider);
+          if (provider) registerPush(provider.id);
+        });
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user?.email) {
-        fetchCurrentProvider(session.user.email).then(setCurrentProvider);
+        fetchCurrentProvider(session.user.email).then(provider => {
+          setCurrentProvider(provider);
+          if (provider) registerPush(provider.id);
+        });
       } else {
         setCurrentProvider(null);
       }

@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -423,6 +423,7 @@ export function RequestPage({ currentProvider }) {
   const [myReqs, setMyReqs]   = useState([]);
   const [start, setStart]     = useState("");
   const [end, setEnd]         = useState("");
+  const [allProviders, setAllProviders] = useState([]);
 
   const [noCallReqs, setNoCallReqs]       = useState([]);
   const [noCallDay, setNoCallDay]         = useState("");
@@ -439,7 +440,10 @@ export function RequestPage({ currentProvider }) {
     fetchRequests(currentProvider.id).then(setMyReqs);
     fetchNoCallDayRequests(currentProvider.id).then(setNoCallReqs);
     fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
+    fetchProviders().then(setAllProviders);
   }, [currentProvider]);
+
+  const adminIds = allProviders.filter(p => p.is_admin).map(p => p.id);
 
   const opts = [
     ["Days Off",      "Completely unavailable"],
@@ -454,6 +458,14 @@ export function RequestPage({ currentProvider }) {
     if (!error) {
       setDone(true);
       fetchRequests(currentProvider.id).then(setMyReqs);
+      // Notify admins of new request
+      if (adminIds.length > 0) {
+        sendPushNotification({
+          providerIds: adminIds,
+          title: "New Time-Off Request",
+          body: `${currentProvider.name} requested ${type} from ${start} to ${end}`,
+        });
+      }
       setTimeout(() => setDone(false), 2500);
     }
     setLoading(false);
@@ -532,6 +544,14 @@ export function RequestPage({ currentProvider }) {
       setSwitchDate("");
       setSwitchToDate("");
       fetchRequests(currentProvider.id).then(setMyReqs);
+      // Notify the target provider
+      if (provOnSwitchTo?.id) {
+        sendPushNotification({
+          providerIds: [provOnSwitchTo.id],
+          title: "Call Switch Request",
+          body: `${currentProvider.name} wants to swap their call on ${switchDate} with yours on ${switchToDate}`,
+        });
+      }
       setTimeout(() => setDone(false), 2500);
     }
     setLoading(false);
@@ -807,15 +827,22 @@ export function RequestPage({ currentProvider }) {
                 <button
                   style={btnS({ flex: 1, padding: "9px", fontSize: 12, background: "#65b896" })}
                   onClick={async () => {
-                    // Execute the actual schedule swap
                     const ok = await executeCallSwitch(
                       r.id,
-                      r.provider_id,        // requester's provider ID
-                      currentProvider.id,   // target (me) provider ID
-                      r.start_date,         // requester's date (they give up)
-                      r.end_date            // my date (I give up)
+                      r.provider_id,
+                      currentProvider.id,
+                      r.start_date,
+                      r.end_date
                     );
-                    if (ok) fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
+                    if (ok) {
+                      fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
+                      // Notify the requester their switch was accepted
+                      sendPushNotification({
+                        providerIds: [r.provider_id],
+                        title: "Call Switch Accepted ✓",
+                        body: `${currentProvider.name} accepted your switch request`,
+                      });
+                    }
                   }}
                 >
                   Accept Swap
@@ -825,6 +852,12 @@ export function RequestPage({ currentProvider }) {
                   onClick={async () => {
                     await updateRequestStatus(r.id, "Denied");
                     fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
+                    // Notify the requester their switch was declined
+                    sendPushNotification({
+                      providerIds: [r.provider_id],
+                      title: "Call Switch Declined",
+                      body: `${currentProvider.name} declined your switch request`,
+                    });
                   }}
                 >
                   Decline
@@ -1517,6 +1550,14 @@ function AIScheduleGenerator() {
       }
 
       setSummary(summaries.join("\n\n"));
+
+      // Notify all providers that a new schedule was published
+      const monthNames = monthsToGenerate.map(({ year: y, month: m }) => `${MONTHS[m]} ${y}`).join(", ");
+      sendPushNotification({
+        providerIds: providers.map(p => p.id),
+        title: "Schedule Published 📅",
+        body: `The call schedule for ${monthNames} is now available`,
+      });
     } catch(err) {
       setError("Something went wrong. Please try again.");
       console.error(err);
@@ -1762,6 +1803,15 @@ export function AdminPage({ onBack }) {
     if (status !== "Approved") {
       await updateRequestStatus(id, status);
       fetchRequests().then(setReqs);
+      // Notify provider their request was denied
+      const req = reqs.find(r => r.id === id);
+      if (req?.provider_id) {
+        sendPushNotification({
+          providerIds: [req.provider_id],
+          title: "Request Update",
+          body: `Your ${req.type} request from ${req.start_date} to ${req.end_date} was denied`,
+        });
+      }
       return;
     }
 
@@ -1903,10 +1953,8 @@ export function AdminPage({ onBack }) {
   const [conflictSaving, setConflictSaving] = useState(false);
 
   const handleConflictConfirm = async () => {
-    const { requestId, conflicts, selections } = conflictModal;
+    const { requestId, conflicts, selections, req } = conflictModal;
     setConflictSaving(true);
-    
-    console.log("Confirming conflict resolution:", selections);
 
     const updates = conflicts.filter(c => !c.blocked).map(({ date }) => ({
       date,
@@ -1914,12 +1962,8 @@ export function AdminPage({ onBack }) {
     }));
 
     for (const { date, email } of updates) {
-      if (!email) { console.error("No email for date", date); continue; }
-      console.log(`Updating ${date} → ${email}`);
-      const ok = await updateScheduleDate(date, email);
-      if (!ok) console.error("Failed to update", date, email);
-
-      // If Saturday, also update the mirrored Sunday
+      if (!email) continue;
+      await updateScheduleDate(date, email);
       const d = new Date(date + "T00:00:00");
       if (d.getDay() === 6) {
         const sunDate = new Date(d);
@@ -1930,6 +1974,16 @@ export function AdminPage({ onBack }) {
     }
 
     await updateRequestStatus(requestId, "Approved");
+
+    // Notify the requesting provider their request was approved
+    if (req?.provider_id) {
+      sendPushNotification({
+        providerIds: [req.provider_id],
+        title: "Request Approved ✓",
+        body: `Your ${req.type} request from ${req.start_date} to ${req.end_date} was approved`,
+      });
+    }
+
     fetchRequests().then(setReqs);
     setConflictSaving(false);
     setConflictModal(null);
@@ -2237,7 +2291,15 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
   const send = async () => {
     if (!txt.trim() || !currentProvider || !recipient) return;
     const { data } = await sendMessage({ senderId:currentProvider.id, recipientId:recipient.id, text:txt });
-    if (data) setMsgs(m => [...m, data]);
+    if (data) {
+      setMsgs(m => [...m, data]);
+      // Notify the recipient
+      sendPushNotification({
+        providerIds: [recipient.id],
+        title: `Message from ${currentProvider.name}`,
+        body: txt.trim().length > 60 ? txt.trim().slice(0, 60) + "…" : txt.trim(),
+      });
+    }
     setTxt("");
   };
 
