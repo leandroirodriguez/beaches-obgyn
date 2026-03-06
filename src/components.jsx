@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -144,7 +144,7 @@ export function Toggle({ val, fn }) {
   );
 }
 
-export function Header({ onNotif, onSettings, logoSrc }) {
+export function Header({ onNotif, onSettings, logoSrc, unreadCount=0 }) {
   return (
     <div style={{
       display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -155,13 +155,15 @@ export function Header({ onNotif, onSettings, logoSrc }) {
       <div style={{display:"flex", gap:14, alignItems:"center", width:50, justifyContent:"flex-end"}}>
         <div style={{position:"relative", cursor:"pointer"}} onClick={onNotif}>
           <IcoBell color={C.teal}/>
-          <div style={{
-            position:"absolute", top:-3, right:-3, width:14, height:14,
-            background:C.coral, borderRadius:"50%", display:"flex",
-            alignItems:"center", justifyContent:"center", border:"2px solid #fff"
-          }}>
-            <span style={{fontSize:8, color:"#fff", fontWeight:900}}>3</span>
-          </div>
+          {unreadCount > 0 && (
+            <div style={{
+              position:"absolute", top:-3, right:-3, width:16, height:16,
+              background:C.coral, borderRadius:"50%", display:"flex",
+              alignItems:"center", justifyContent:"center", border:"2px solid #fff"
+            }}>
+              <span style={{fontSize:8, color:"#fff", fontWeight:900}}>{unreadCount > 9 ? "9+" : unreadCount}</span>
+            </div>
+          )}
         </div>
         <div style={{cursor:"pointer"}} onClick={onSettings}>
           <IcoGear color={C.teal}/>
@@ -2060,7 +2062,6 @@ export function AdminPage({ onBack }) {
           ["requests", "Requests"],
           ["nocall",   `No-Call${pendingNoCall > 0 ? ` (${pendingNoCall})` : ""}`],
           ["users",    "Users"],
-          ["schedule", "Schedule"],
         ].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             flex: 1, padding: "9px 2px", borderRadius: 6, border: "none",
@@ -2336,6 +2337,59 @@ export function MessagesPage({ recipient, onBack, currentProvider }) {
         <input value={txt} onChange={e=>setTxt(e.target.value)} onKeyDown={e=>e.key==="Enter"&&send()} placeholder="Type a message..." style={{...inpS, flex:1}}/>
         <button onClick={send} style={btnS({width:"auto", padding:"10px 16px", fontSize:13})}>Send</button>
       </div>
+    </div>
+  );
+}
+
+export function NotificationsPage({ onBack, currentProvider }) {
+  const [notifs, setNotifs] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!currentProvider) return;
+    fetchNotifications(currentProvider.id).then(data => {
+      setNotifs(data);
+      setLoading(false);
+    });
+    // Mark all as read when page opens
+    markNotificationsRead(currentProvider.id);
+  }, [currentProvider]);
+
+  const timeAgo = (ts) => {
+    const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
+    if (diff < 60) return "just now";
+    if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+    return `${Math.floor(diff/86400)}d ago`;
+  };
+
+  return (
+    <div style={{paddingBottom:20}}>
+      <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:16}}>
+        <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
+        <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Notifications</span>
+      </div>
+      {loading && <p style={{fontFamily:ff, fontSize:13, color:C.sub, textAlign:"center", padding:20}}>Loading…</p>}
+      {!loading && notifs.length === 0 && (
+        <div style={card({padding:"32px 20px", textAlign:"center"})}>
+          <p style={{fontSize:32, margin:"0 0 8px"}}>🔔</p>
+          <p style={{fontFamily:ff, fontWeight:800, fontSize:14, color:C.text, margin:"0 0 4px"}}>All caught up!</p>
+          <p style={{fontFamily:ffb, fontSize:12, color:C.sub, margin:0}}>No notifications yet</p>
+        </div>
+      )}
+      {notifs.map(n => (
+        <div key={n.id} style={card({
+          padding:"13px 16px", marginBottom:10,
+          borderLeft: n.read ? "none" : `3px solid ${C.teal}`,
+          background: n.read ? "#fff" : `${C.wave}88`,
+        })}>
+          <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start"}}>
+            <p style={{margin:"0 0 3px", fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{n.title}</p>
+            <span style={{fontFamily:ffb, fontSize:10, color:C.sub, flexShrink:0, marginLeft:8}}>{timeAgo(n.created_at)}</span>
+          </div>
+          <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.sub}}>{n.body}</p>
+        </div>
+      ))}
     </div>
   );
 }

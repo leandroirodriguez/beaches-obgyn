@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import logoSrc from "./assets/logo.png";
 import { C, ff, ffb, btnS, card, inpS, lblS } from "./data";
 import { supabase } from "./supabase";
-import { fetchCurrentProvider, registerPushSubscription } from "./api";
+import { fetchCurrentProvider, registerPushSubscription, fetchNotifications, markNotificationsRead } from "./api";
 import {
   IcoHome, IcoProviders, IcoRequest, IcoMore,
   Header,
@@ -13,6 +13,7 @@ import {
   AdminPage,
   MessagesPage,
   SettingsPage,
+  NotificationsPage,
   FairnessPage,
   UpcomingVacationsPage,
   CallLogicPage,
@@ -146,6 +147,18 @@ export default function App() {
   const [sub, setSub]                         = useState(null);
   const [msgRecip, setMsgRecip]               = useState(null);
   const [isInvite, setIsInvite]               = useState(false);
+  const [unreadCount, setUnreadCount]         = useState(0);
+
+  // Poll for unread notifications every 30 seconds
+  useEffect(() => {
+    if (!currentProvider) return;
+    const refresh = () => fetchNotifications(currentProvider.id).then(notifs => {
+      setUnreadCount(notifs.filter(n => !n.read).length);
+    });
+    refresh();
+    const interval = setInterval(refresh, 30000);
+    return () => clearInterval(interval);
+  }, [currentProvider]);
 
   useEffect(() => {
     // Detect invite link (Supabase puts type=invite in the hash)
@@ -193,14 +206,21 @@ export default function App() {
 
   const onMessage = p => { setMsgRecip(p); setSub("messages"); };
 
+  const handleBell = () => {
+    setSub("notifications");
+    setUnreadCount(0);
+    if (currentProvider) markNotificationsRead(currentProvider.id);
+  };
+
   function renderBody() {
-    if (sub === "messages")  return <MessagesPage recipient={msgRecip} onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
-    if (sub === "admin")     return <AdminPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
-    if (sub === "fairness")  return <FairnessPage onBack={()=>setSub(null)}/>;
-    if (sub === "vacations") return <UpcomingVacationsPage onBack={()=>setSub(null)}/>;
-    if (sub === "logic")     return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
-    if (sub === "print")     return <PrintSchedulePage onBack={()=>setSub(null)}/>;
-    if (sub === "settings")  return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider}/>;
+    if (sub === "messages")      return <MessagesPage recipient={msgRecip} onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (sub === "admin")         return <AdminPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (sub === "fairness")      return <FairnessPage onBack={()=>setSub(null)}/>;
+    if (sub === "vacations")     return <UpcomingVacationsPage onBack={()=>setSub(null)}/>;
+    if (sub === "logic")         return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (sub === "print")         return <PrintSchedulePage onBack={()=>setSub(null)}/>;
+    if (sub === "settings")      return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider}/>;
+    if (sub === "notifications") return <NotificationsPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (tab === "home")      return <HomePage/>;
     if (tab === "providers") return <ProvidersPage onMessage={onMessage} currentProvider={currentProvider}/>;
     if (tab === "request")   return <RequestPage currentProvider={currentProvider}/>;
@@ -209,7 +229,7 @@ export default function App() {
 
   return (
     <div style={{minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto", fontFamily:ff}}>
-      <Header logoSrc={logoSrc} onNotif={()=>setSub("messages")} onSettings={()=>setSub("settings")}/>
+      <Header logoSrc={logoSrc} onNotif={handleBell} onSettings={()=>setSub("settings")} unreadCount={unreadCount}/>
       <div style={{flex:1, overflowY:"auto", padding:"14px 14px 80px"}}>
         {renderBody()}
       </div>

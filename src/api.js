@@ -215,7 +215,35 @@ export async function updateScheduleDate(date, providerEmail) {
   return !error;
 }
 
-// ── Push Notifications ────────────────────────────────────────────────────────
+export async function fetchNotifications(providerId) {
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("*")
+    .eq("provider_id", providerId)
+    .order("created_at", { ascending: false })
+    .limit(30);
+  if (error) console.error("fetchNotifications:", error);
+  return data || [];
+}
+
+export async function markNotificationsRead(providerId) {
+  const { error } = await supabase
+    .from("notifications")
+    .update({ read: true })
+    .eq("provider_id", providerId)
+    .eq("read", false);
+  if (error) console.error("markNotificationsRead:", error);
+  return !error;
+}
+
+export async function createNotification({ providerId, title, body }) {
+  const { error } = await supabase
+    .from("notifications")
+    .insert({ provider_id: providerId, title, body, read: false });
+  if (error) console.error("createNotification:", error);
+  return !error;
+}
+
 
 export async function registerPushSubscription(providerId, subscription) {
   const { endpoint, keys: { p256dh, auth } } = subscription.toJSON();
@@ -229,6 +257,9 @@ export async function registerPushSubscription(providerId, subscription) {
 
 export async function sendPushNotification({ providerIds, title, body, data = {} }) {
   try {
+    // Save in-app notification for each provider
+    await Promise.all(providerIds.map(id => createNotification({ providerId: id, title, body })));
+    // Send push
     await fetch("/api/send-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -238,3 +269,4 @@ export async function sendPushNotification({ providerIds, title, body, data = {}
     console.error("sendPushNotification:", err);
   }
 }
+
