@@ -1007,9 +1007,9 @@ export function PrintSchedulePage({ onBack }) {
   const [schedules, setSchedules] = useState({});
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [printData, setPrintData] = useState(null);
   const [logoDataUrl, setLogoDataUrl] = useState(null);
 
-  // Build list of month options: 6 months back, 12 months forward
   const monthOptions = [];
   for (let i = -6; i <= 12; i++) {
     const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
@@ -1017,7 +1017,6 @@ export function PrintSchedulePage({ onBack }) {
   }
 
   const toggleMonth = (year, month) => {
-    const key = `${year}-${month}`;
     setSelectedMonths(prev => {
       const exists = prev.find(m => m.year === year && m.month === month);
       if (exists) return prev.filter(m => !(m.year === year && m.month === month));
@@ -1027,225 +1026,109 @@ export function PrintSchedulePage({ onBack }) {
 
   const isSelected = (year, month) => !!selectedMonths.find(m => m.year === year && m.month === month);
 
-  // Load logo as base64 for print
   useEffect(() => {
     const img = new Image();
     img.crossOrigin = "anonymous";
     img.onload = () => {
       const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
+      canvas.width = img.width; canvas.height = img.height;
       canvas.getContext("2d").drawImage(img, 0, 0);
       setLogoDataUrl(canvas.toDataURL("image/png"));
     };
     img.src = "/logo.png";
   }, []);
 
-  useEffect(() => {
-    fetchProviders().then(setProviders);
-  }, []);
+  useEffect(() => { fetchProviders().then(setProviders); }, []);
 
   const handlePrint = async () => {
     if (selectedMonths.length === 0) return;
     setLoading(true);
-
     const results = await Promise.all(
       selectedMonths.map(({ year, month }) =>
         fetchSchedule(year, month).then(data => ({ year, month, data }))
       )
     );
     const merged = {};
-    results.forEach(({ year, month, data }) => {
-      merged[`${year}-${month}`] = data;
-    });
+    results.forEach(({ year, month, data }) => { merged[`${year}-${month}`] = data; });
     setLoading(false);
-
-    const pagesHtml = selectedMonths.map(({ year, month }) => {
-      const scheduleData = merged[`${year}-${month}`];
-      const monthName = MONTHS[month];
-      const days = getDays(year, month);
-      const firstDay = getFirst(year, month);
-      const cells = [];
-      for (let i = 0; i < firstDay; i++) cells.push(null);
-      for (let d = 1; d <= days; d++) cells.push(d);
-      while (cells.length % 7 !== 0) cells.push(null);
-      const numRows = Math.ceil(cells.length / 7);
-      const rowH = Math.floor(520 / numRows);
-
-      const cellsHtml = cells.map((d) => {
-        if (!d) return `<div style="background:#fafafa;border-radius:4px;"></div>`;
-        const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-        const prov = scheduleData?.[dateKey];
-        const dow = (firstDay + d - 1) % 7;
-        const isWeekend = dow === 0 || dow === 6;
-        const avatarHtml = prov?.avatar_url
-          ? `<img src="${prov.avatar_url}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-bottom:2px;border:2px solid ${prov.color};display:block;"/>`
-          : prov
-            ? `<div style="width:20px;height:20px;border-radius:50%;background:${prov.color};margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:900;color:#fff;">${prov.initials}</div>`
-            : "";
-        const nameHtml = prov ? `<div style="font-size:7.5px;font-weight:700;color:#333;line-height:1.2;">${prov.name.replace("Dr. ","")}</div>` : "";
-        return `<div style="border:1px solid ${prov ? prov.color+"55" : "#e8e8e8"};border-top:3px solid ${prov ? prov.color : "#e8e8e8"};border-radius:4px;padding:3px 4px;background:${isWeekend?"#fdf8f8":"#fff"};display:flex;flex-direction:column;overflow:hidden;">
-          <div style="font-size:10px;font-weight:800;color:${isWeekend?"#e05c5c":"#1a3a35"};margin-bottom:2px;">${d}</div>
-          ${avatarHtml}${nameHtml}
-        </div>`;
-      }).join("");
-
-      const legendHtml = providers.map(p =>
-        `<div style="display:flex;align-items:center;gap:4px;">
-          <div style="width:8px;height:8px;border-radius:50%;background:${p.color};"></div>
-          <span style="font-size:7px;color:#555;font-weight:600;">${p.name}</span>
-        </div>`
-      ).join("");
-
-      const logoHtml = logoDataUrl
-        ? `<img src="${logoDataUrl}" style="height:32px;object-fit:contain;"/>`
-        : `<span style="font-weight:900;font-size:14px;color:#1a8c78;">Beaches OBGYN</span>`;
-
-      return `<div style="width:100%;height:100vh;padding:12px 18px 10px;box-sizing:border-box;background:#fff;display:flex;flex-direction:column;page-break-after:always;overflow:hidden;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">
-          ${logoHtml}
-          <div style="text-align:right;">
-            <div style="font-size:16px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div>
-            <div style="font-size:8px;color:#888;">Call Schedule</div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">
-          ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>
-            `<div style="text-align:center;padding:2px 0;font-size:8px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`
-          ).join("")}
-        </div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},${rowH}px);gap:2px;flex:1;overflow:hidden;">
-          ${cellsHtml}
-        </div>
-        <div style="margin-top:4px;padding-top:4px;border-top:1px solid #e8e8e8;display:flex;flex-wrap:wrap;gap:2px 10px;flex-shrink:0;">
-          ${legendHtml}
-        </div>
-      </div>`;
-    }).join("");
-
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Call Schedule</title>
-      <style>
-        * { margin:0; padding:0; box-sizing:border-box; font-family:-apple-system,Helvetica,sans-serif; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-        body { background:#fff; }
-        @page { size:11in 8.5in landscape; margin:0; }
-      </style>
-    </head><body>${pagesHtml}</body></html>`;
-
-    // iOS PWA: inject into a hidden iframe and print from it
-    const existingFrame = document.getElementById("print-frame");
-    if (existingFrame) existingFrame.remove();
-
-    const iframe = document.createElement("iframe");
-    iframe.id = "print-frame";
-    iframe.style.cssText = "position:fixed;top:-9999px;left:-9999px;width:0;height:0;border:none;";
-    document.body.appendChild(iframe);
-
-    iframe.contentDocument.open();
-    iframe.contentDocument.write(html);
-    iframe.contentDocument.close();
-
+    setPrintData(merged);
+    // Inject print styles, print, then remove
     setTimeout(() => {
-      try {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-      } catch(e) {
-        // Fallback for browsers that block iframe printing
-        const newTab = window.open("", "_blank");
-        if (newTab) {
-          newTab.document.open();
-          newTab.document.write(html);
-          newTab.document.close();
-          setTimeout(() => { try { newTab.print(); } catch(e2) {} }, 800);
-        }
-      }
-    }, 600);
+      window.print();
+    }, 300);
   };
 
-  const renderCalendar = (year, month, scheduleData) => {
+  const handleBack = () => {
+    setPrintData(null);
+    onBack();
+  };
+
+  const renderCalendarPage = (year, month) => {
+    const scheduleData = printData?.[`${year}-${month}`];
     const monthName = MONTHS[month];
     const days = getDays(year, month);
     const firstDay = getFirst(year, month);
     const cells = [];
     for (let i = 0; i < firstDay; i++) cells.push(null);
     for (let d = 1; d <= days; d++) cells.push(d);
-    // Pad to complete last row
     while (cells.length % 7 !== 0) cells.push(null);
+    const numRows = Math.ceil(cells.length / 7);
+    const rowH = Math.floor((816 - 20 - 16 - 50 - 28 - 30) / numRows);
 
     return (
-      <div className="print-page" key={`${year}-${month}`} style={{
-        width: "1056px", height: "816px", padding: "20px 24px 16px",
-        boxSizing: "border-box", background: "#fff",
-        fontFamily: ff, pageBreakAfter: "always", pageBreakInside: "avoid",
-        display: "flex", flexDirection: "column", overflow: "hidden",
+      <div key={`${year}-${month}`} style={{
+        width:"1056px", height:"816px", padding:"20px 24px 16px",
+        boxSizing:"border-box", background:"#fff",
+        fontFamily:ff, pageBreakAfter:"always", pageBreakInside:"avoid",
+        display:"flex", flexDirection:"column", overflow:"hidden",
       }}>
-        {/* Header */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, borderBottom: "2px solid #1a8c78", paddingBottom: 6, flexShrink: 0 }}>
+        <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8, borderBottom:"2px solid #1a8c78", paddingBottom:6, flexShrink:0}}>
           {logoDataUrl
-            ? <img src={logoDataUrl} alt="Beaches OBGYN" style={{ height: 32, objectFit: "contain" }} />
-            : <span style={{ fontWeight: 900, fontSize: 15, color: "#1a8c78" }}>Beaches OBGYN</span>
+            ? <img src={logoDataUrl} alt="Beaches OBGYN" style={{height:32, objectFit:"contain"}}/>
+            : <span style={{fontWeight:900, fontSize:15, color:"#1a8c78"}}>Beaches OBGYN</span>
           }
-          <div style={{ textAlign: "right" }}>
-            <p style={{ margin: 0, fontSize: 17, fontWeight: 900, color: "#1a3a35" }}>{monthName} {year}</p>
-            <p style={{ margin: 0, fontSize: 8, color: "#888" }}>Call Schedule</p>
+          <div style={{textAlign:"right"}}>
+            <p style={{margin:0, fontSize:17, fontWeight:900, color:"#1a3a35"}}>{monthName} {year}</p>
+            <p style={{margin:0, fontSize:8, color:"#888"}}>Call Schedule</p>
           </div>
         </div>
-
-        {/* Day headers */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, marginBottom: 2, flexShrink: 0 }}>
-          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d, i) => (
-            <div key={d} style={{
-              textAlign: "center", padding: "3px 0",
-              fontSize: 9, fontWeight: 900,
-              color: i === 0 || i === 6 ? "#e05c5c" : "#1a8c78",
-              background: "#f0faf8", borderRadius: 3,
-            }}>{d}</div>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gap:2, marginBottom:2, flexShrink:0}}>
+          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i) => (
+            <div key={d} style={{textAlign:"center", padding:"3px 0", fontSize:9, fontWeight:900, color:i===0||i===6?"#e05c5c":"#1a8c78", background:"#f0faf8", borderRadius:3}}>{d}</div>
           ))}
         </div>
-
-        {/* Calendar grid — fixed row count */}
-        {(() => {
-          const numRows = Math.ceil(cells.length / 7);
-          const rowH = Math.floor((816 - 20 - 16 - 50 - 28 - 30) / numRows);
-          return (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gridTemplateRows: `repeat(${numRows}, ${rowH}px)`, gap: 2, flex: 1 }}>
-              {cells.map((d, i) => {
-                if (!d) return <div key={i} style={{ background: "#fafafa", borderRadius: 4 }} />;
-                const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-                const prov = scheduleData?.[dateKey];
-                const dow = (firstDay + d - 1) % 7;
-                const isWeekend = dow === 0 || dow === 6;
-                return (
-                  <div key={i} style={{
-                    border: `1px solid ${prov ? prov.color + "55" : "#e8e8e8"}`,
-                    borderTop: prov ? `3px solid ${prov.color}` : "3px solid #e8e8e8",
-                    borderRadius: 4, padding: "3px 4px",
-                    background: isWeekend ? "#fdf8f8" : "#fff",
-                    display: "flex", flexDirection: "column", alignItems: "flex-start",
-                    overflow: "hidden",
-                  }}>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: isWeekend ? "#e05c5c" : "#1a3a35", marginBottom: 2, lineHeight: 1, flexShrink: 0 }}>{d}</span>
-                    {prov && <>
-                      {prov.avatar_url
-                        ? <img src={prov.avatar_url} alt={prov.name} style={{ width: 20, height: 20, borderRadius: "50%", objectFit: "cover", marginBottom: 2, border: `2px solid ${prov.color}`, flexShrink: 0 }} />
-                        : <div style={{ width: 20, height: 20, borderRadius: "50%", background: prov.color, marginBottom: 2, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 7, fontWeight: 900, color: "#fff" }}>{prov.initials}</div>
-                      }
-                      <span style={{ fontSize: 7.5, fontWeight: 700, color: "#333", lineHeight: 1.2, wordBreak: "break-word" }}>
-                        {prov.name.replace("Dr. ", "")}
-                      </span>
-                    </>}
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
-
-        {/* Legend */}
-        <div style={{ marginTop: 6, paddingTop: 5, borderTop: "1px solid #e8e8e8", display: "flex", flexWrap: "wrap", gap: "3px 12px", flexShrink: 0 }}>
+        <div style={{display:"grid", gridTemplateColumns:"repeat(7, 1fr)", gridTemplateRows:`repeat(${numRows}, ${rowH}px)`, gap:2, flex:1}}>
+          {cells.map((d, i) => {
+            if (!d) return <div key={i} style={{background:"#fafafa", borderRadius:4}}/>;
+            const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const prov = scheduleData?.[dateKey];
+            const dow = (firstDay + d - 1) % 7;
+            const isWeekend = dow === 0 || dow === 6;
+            return (
+              <div key={i} style={{
+                border:`1px solid ${prov ? prov.color+"55" : "#e8e8e8"}`,
+                borderTop:prov?`3px solid ${prov.color}`:"3px solid #e8e8e8",
+                borderRadius:4, padding:"3px 4px",
+                background:isWeekend?"#fdf8f8":"#fff",
+                display:"flex", flexDirection:"column", alignItems:"flex-start", overflow:"hidden",
+              }}>
+                <span style={{fontSize:10, fontWeight:800, color:isWeekend?"#e05c5c":"#1a3a35", marginBottom:2, lineHeight:1, flexShrink:0}}>{d}</span>
+                {prov && <>
+                  {prov.avatar_url
+                    ? <img src={prov.avatar_url} alt={prov.name} style={{width:20, height:20, borderRadius:"50%", objectFit:"cover", marginBottom:2, border:`2px solid ${prov.color}`, flexShrink:0}}/>
+                    : <div style={{width:20, height:20, borderRadius:"50%", background:prov.color, marginBottom:2, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:7, fontWeight:900, color:"#fff"}}>{prov.initials}</div>
+                  }
+                  <span style={{fontSize:7.5, fontWeight:700, color:"#333", lineHeight:1.2, wordBreak:"break-word"}}>{prov.name.replace("Dr. ","")}</span>
+                </>}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{marginTop:6, paddingTop:5, borderTop:"1px solid #e8e8e8", display:"flex", flexWrap:"wrap", gap:"3px 12px", flexShrink:0}}>
           {providers.map(p => (
-            <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <div style={{ width: 7, height: 7, borderRadius: "50%", background: p.color, flexShrink: 0 }} />
-              <span style={{ fontSize: 7, color: "#555", fontWeight: 600 }}>{p.name}</span>
+            <div key={p.id} style={{display:"flex", alignItems:"center", gap:4}}>
+              <div style={{width:7, height:7, borderRadius:"50%", background:p.color, flexShrink:0}}/>
+              <span style={{fontSize:7, color:"#555", fontWeight:600}}>{p.name}</span>
             </div>
           ))}
         </div>
@@ -1254,65 +1137,75 @@ export function PrintSchedulePage({ onBack }) {
   };
 
   return (
-      <div style={{ paddingBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
-          <button onClick={onBack} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.primary }}>‹</button>
-          <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 16, color: C.text }}>Print Schedule</span>
+    <div style={{paddingBottom:20}}>
+      {/* Print-only styles */}
+      <style>{`
+        @media print {
+          body > * { display: none !important; }
+          #print-root { display: block !important; }
+          @page { size: 11in 8.5in landscape; margin: 0; }
+        }
+        #print-root { display: none; }
+      `}</style>
+
+      {/* Print content rendered in DOM but hidden until print */}
+      {printData && (
+        <div id="print-root">
+          {selectedMonths.map(({ year, month }) => renderCalendarPage(year, month))}
         </div>
+      )}
 
-        <div style={card({ padding: "12px 14px", marginBottom: 14, background: `${C.wave}88`, border: `1px solid ${C.teal}33` })}>
-          <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.teal }}>Select Months to Print</p>
-          <p style={{ margin: "4px 0 0", fontFamily: ffb, fontSize: 12, color: C.sub }}>Each month prints as a full 8.5×11 page. Select one or more.</p>
-        </div>
-
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-          {monthOptions.map(({ year, month }) => {
-            const sel = isSelected(year, month);
-            const isCurrent = year === today.getFullYear() && month === today.getMonth();
-            return (
-              <div key={`${year}-${month}`} onClick={() => toggleMonth(year, month)} style={{
-                ...card({ padding: "12px 16px" }),
-                border: `1.5px solid ${sel ? C.teal : C.grey}`,
-                background: sel ? `${C.wave}88` : "#FFF",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                cursor: "pointer",
-              }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontFamily: ff, fontWeight: 800, fontSize: 14, color: sel ? C.teal : C.text }}>
-                    {MONTHS[month]} {year}
-                  </span>
-                  {isCurrent && <span style={{ fontFamily: ff, fontWeight: 700, fontSize: 10, color: "#fff", background: C.teal, borderRadius: 4, padding: "2px 6px" }}>Current</span>}
-                </div>
-                <div style={{
-                  width: 22, height: 22, borderRadius: 5, flexShrink: 0,
-                  border: `2px solid ${sel ? C.teal : C.greyMid}`,
-                  background: sel ? C.teal : "transparent",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  {sel && <span style={{ color: "#fff", fontSize: 13, fontWeight: 900 }}>✓</span>}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {selectedMonths.length > 0 && (
-          <div style={card({ padding: "10px 14px", marginBottom: 14, background: `${C.wave}44` })}>
-            <p style={{ margin: 0, fontFamily: ffb, fontSize: 12, color: C.teal }}>
-              {selectedMonths.length} month{selectedMonths.length > 1 ? "s" : ""} selected →{" "}
-              {selectedMonths.map(({ year, month }) => `${MONTHS[month]} ${year}`).join(", ")}
-            </p>
-          </div>
-        )}
-
-        <button
-          style={btnS({ opacity: (loading || selectedMonths.length === 0) ? 0.5 : 1 })}
-          disabled={loading || selectedMonths.length === 0}
-          onClick={handlePrint}
-        >
-          {loading ? "Loading schedule…" : `Print ${selectedMonths.length} Month${selectedMonths.length !== 1 ? "s" : ""}`}
-        </button>
+      {/* Normal app UI */}
+      <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:16}}>
+        <button onClick={handleBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
+        <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>Print Schedule</span>
       </div>
+
+      <div style={card({padding:"12px 14px", marginBottom:14, background:`${C.wave}88`, border:`1px solid ${C.teal}33`})}>
+        <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.teal}}>Select Months to Print</p>
+        <p style={{margin:"4px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>Each month prints as a full 8.5×11 page. Select one or more.</p>
+      </div>
+
+      <div style={{display:"flex", flexDirection:"column", gap:8, marginBottom:16}}>
+        {monthOptions.map(({ year, month }) => {
+          const sel = isSelected(year, month);
+          const isCurrent = year === today.getFullYear() && month === today.getMonth();
+          return (
+            <div key={`${year}-${month}`} onClick={() => toggleMonth(year, month)} style={{
+              ...card({padding:"12px 16px"}),
+              border:`1.5px solid ${sel ? C.teal : C.grey}`,
+              background: sel ? `${C.wave}88` : "#FFF",
+              display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer",
+            }}>
+              <div style={{display:"flex", alignItems:"center", gap:10}}>
+                <span style={{fontFamily:ff, fontWeight:800, fontSize:14, color:sel ? C.teal : C.text}}>{MONTHS[month]} {year}</span>
+                {isCurrent && <span style={{fontFamily:ff, fontWeight:700, fontSize:10, color:"#fff", background:C.teal, borderRadius:4, padding:"2px 6px"}}>Current</span>}
+              </div>
+              <div style={{width:22, height:22, borderRadius:5, flexShrink:0, border:`2px solid ${sel ? C.teal : C.greyMid}`, background:sel ? C.teal : "transparent", display:"flex", alignItems:"center", justifyContent:"center"}}>
+                {sel && <span style={{color:"#fff", fontSize:13, fontWeight:900}}>✓</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {selectedMonths.length > 0 && (
+        <div style={card({padding:"10px 14px", marginBottom:14, background:`${C.wave}44`})}>
+          <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.teal}}>
+            {selectedMonths.length} month{selectedMonths.length > 1 ? "s" : ""} selected →{" "}
+            {selectedMonths.map(({year, month}) => `${MONTHS[month]} ${year}`).join(", ")}
+          </p>
+        </div>
+      )}
+
+      <button
+        style={btnS({opacity:(loading || selectedMonths.length === 0) ? 0.5 : 1})}
+        disabled={loading || selectedMonths.length === 0}
+        onClick={handlePrint}
+      >
+        {loading ? "Loading schedule…" : `Print ${selectedMonths.length} Month${selectedMonths.length !== 1 ? "s" : ""}`}
+      </button>
+    </div>
   );
 }
 
