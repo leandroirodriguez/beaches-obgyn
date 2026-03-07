@@ -144,12 +144,7 @@ async function registerPush(providerId) {
   }
 }
 
-export default function App() {
-  // Check for print route first — before any React state
-  if (new URLSearchParams(window.location.search).get("print") === "1") {
-    return <PrintRenderer />;
-  }
-
+function AppInner() {
   const [session, setSession]                 = useState(null);
   const [authLoading, setAuthLoading]         = useState(true);
   const [currentProvider, setCurrentProvider] = useState(null);
@@ -295,4 +290,11 @@ export default function App() {
       )}
     </div>
   );
+}
+
+export default function App() {
+  if (new URLSearchParams(window.location.search).get("print") === "1") {
+    return <PrintRenderer />;
+  }
+  return <AppInner />;
 }
