@@ -1121,9 +1121,13 @@ export function PrintSchedulePage({ onBack }) {
       </div>`;
     }).join("");
 
-    // Store HTML in sessionStorage and navigate to print page
-    // This is the only reliable way to print on iOS PWA
-    sessionStorage.setItem("printHtml", pagesHtml);
+    // Store HTML and navigate to print page
+    try {
+      sessionStorage.setItem("printHtml", pagesHtml);
+    } catch(e) {
+      // sessionStorage full - try localStorage
+      try { localStorage.setItem("printHtml", pagesHtml); } catch(e2) { alert("Print data too large. Try selecting fewer months."); return; }
+    }
     window.location.href = "/?print=1";
   };
 
@@ -2816,11 +2820,12 @@ export function FairnessPage({ onBack }) {
 // Renders calendar-only page from sessionStorage, auto-prints, then redirects back
 export function PrintRenderer() {
   useEffect(() => {
-    const html = sessionStorage.getItem("printHtml");
-    if (!html) { window.location.href = "/"; return; }
+    const html = sessionStorage.getItem("printHtml") || localStorage.getItem("printHtml");
     sessionStorage.removeItem("printHtml");
+    localStorage.removeItem("printHtml");
 
-    // Replace body with just the print content
+    if (!html) { window.location.href = "/"; return; }
+
     document.head.innerHTML = `<meta charset="utf-8"><meta name="viewport" content="width=device-width"/><style>*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:-apple-system,Helvetica,sans-serif;}body{background:#fff;}@page{margin:0.2in;}</style>`;
     document.body.innerHTML = html;
 
@@ -2830,5 +2835,9 @@ export function PrintRenderer() {
     }, 600);
   }, []);
 
-  return null;
+  return (
+    <div style={{display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", fontFamily:"-apple-system,Helvetica,sans-serif"}}>
+      <p style={{color:"#555", fontSize:14}}>Preparing print…</p>
+    </div>
+  );
 }
