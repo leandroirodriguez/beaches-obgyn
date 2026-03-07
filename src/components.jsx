@@ -1042,6 +1042,8 @@ export function PrintSchedulePage({ onBack }) {
   const handlePrint = async () => {
     if (selectedMonths.length === 0) return;
     setLoading(true);
+
+    // Fetch schedule data
     const results = await Promise.all(
       selectedMonths.map(({ year, month }) =>
         fetchSchedule(year, month).then(data => ({ year, month, data }))
@@ -1049,9 +1051,31 @@ export function PrintSchedulePage({ onBack }) {
     );
     const merged = {};
     results.forEach(({ year, month, data }) => { merged[`${year}-${month}`] = data; });
+
+    // Preload all avatar images as base64
+    const toBase64 = (url) => new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.width; canvas.height = img.height;
+          canvas.getContext("2d").drawImage(img, 0, 0);
+          resolve(canvas.toDataURL("image/png"));
+        } catch { resolve(null); }
+      };
+      img.onerror = () => resolve(null);
+      img.src = url;
+    });
+
+    const avatarMap = {};
+    await Promise.all(providers.filter(p => p.avatar_url).map(async p => {
+      avatarMap[p.id] = await toBase64(p.avatar_url);
+    }));
+
     setLoading(false);
 
-    // Build HTML string for all months
+    // Build HTML
     const pagesHtml = selectedMonths.map(({ year, month }) => {
       const scheduleData = merged[`${year}-${month}`];
       const monthName = MONTHS[month];
@@ -1069,22 +1093,27 @@ export function PrintSchedulePage({ onBack }) {
         const prov = scheduleData?.[dateKey];
         const dow = (firstDay + d - 1) % 7;
         const isWeekend = dow === 0 || dow === 6;
-        const avatarHtml = prov?.avatar_url
-          ? `<img src="${prov.avatar_url}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-bottom:2px;border:2px solid ${prov.color};display:block;"/>`
+        const b64 = prov ? avatarMap[prov.id] : null;
+        const avatarHtml = b64
+          ? `<img src="${b64}" style="width:20px;height:20px;border-radius:50%;object-fit:cover;margin-bottom:2px;border:2px solid ${prov.color};display:block;"/>`
           : prov ? `<div style="width:20px;height:20px;border-radius:50%;background:${prov.color};margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:900;color:#fff;">${prov.initials}</div>` : "";
         const nameHtml = prov ? `<div style="font-size:7.5px;font-weight:700;color:#333;line-height:1.2;">${prov.name.replace("Dr. ","")}</div>` : "";
         return `<div style="border:1px solid ${prov ? prov.color+"55" : "#e8e8e8"};border-top:3px solid ${prov ? prov.color : "#e8e8e8"};border-radius:4px;padding:3px 4px;background:${isWeekend?"#fdf8f8":"#fff"};display:flex;flex-direction:column;overflow:hidden;"><div style="font-size:10px;font-weight:800;color:${isWeekend?"#e05c5c":"#1a3a35"};margin-bottom:2px;">${d}</div>${avatarHtml}${nameHtml}</div>`;
       }).join("");
 
-      const legendHtml = providers.map(p =>
-        `<div style="display:flex;align-items:center;gap:4px;"><div style="width:8px;height:8px;border-radius:50%;background:${p.color};"></div><span style="font-size:7px;color:#555;font-weight:600;">${p.name}</span></div>`
-      ).join("");
+      const legendHtml = providers.map(p => {
+        const b64 = avatarMap[p.id];
+        const dot = b64
+          ? `<img src="${b64}" style="width:10px;height:10px;border-radius:50%;object-fit:cover;"/>`
+          : `<div style="width:8px;height:8px;border-radius:50%;background:${p.color};"></div>`;
+        return `<div style="display:flex;align-items:center;gap:4px;">${dot}<span style="font-size:7px;color:#555;font-weight:600;">${p.name}</span></div>`;
+      }).join("");
 
       const logoHtml = logoDataUrl
         ? `<img src="${logoDataUrl}" style="height:32px;object-fit:contain;"/>`
         : `<span style="font-weight:900;font-size:15px;color:#1a8c78;">Beaches OBGYN</span>`;
 
-      return `<div style="width:100%;box-sizing:border-box;background:#fff;font-family:-apple-system,Helvetica,sans-serif;page-break-after:always;display:flex;flex-direction:column;padding:12px 14px;min-height:100vh;">
+      return `<div style="width:100%;box-sizing:border-box;background:#fff;page-break-after:always;display:flex;flex-direction:column;padding:12px 14px;min-height:100vh;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">${logoHtml}<div style="text-align:right;"><div style="font-size:17px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div><div style="font-size:8px;color:#888;">Call Schedule</div></div></div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>`<div style="text-align:center;padding:2px 0;font-size:8px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`).join("")}</div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},1fr);gap:2px;flex:1;">${cellsHtml}</div>
@@ -1092,22 +1121,17 @@ export function PrintSchedulePage({ onBack }) {
       </div>`;
     }).join("");
 
-    // Swap entire body content with print content (works on iOS PWA)
+    const printHtml = `<style>* { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:-apple-system,Helvetica,sans-serif; } body { background:#fff; } @page { margin:0.3in; }</style>${pagesHtml}`;
+
+    // Swap body, wait for repaint, then print
     const originalBody = document.body.innerHTML;
-    document.body.innerHTML = `
-      <style>
-        * { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-        body { background:#fff; font-family:-apple-system,Helvetica,sans-serif; }
-        @page { margin:0.3in; }
-      </style>
-      ${pagesHtml}
-    `;
+    document.body.innerHTML = printHtml;
 
-    window.print();
-
-    // Restore app
-    document.body.innerHTML = originalBody;
-    window.location.reload();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.print();
+      document.body.innerHTML = originalBody;
+      window.location.reload();
+    }));
   };
 
   return (
