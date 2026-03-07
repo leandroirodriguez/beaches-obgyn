@@ -2877,7 +2877,7 @@ export function PrintRenderer() {
 function PrintCalendarView({ months, avatarMap, logoDataUrl, providers }) {
   return (
     <div style={{background:"#fff", fontFamily:"-apple-system,Helvetica,sans-serif"}}>
-      <style>{`*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@page{margin:0.2in;}`}</style>
+      <style>{`*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@page{margin:0.2in;size:landscape;}body{background:#fff;}`}</style>
       {months.map(({ year, month, scheduleData, cells, numRows }) => {
         const firstDay = getFirst(year, month);
         const monthName = MONTHS[month];
