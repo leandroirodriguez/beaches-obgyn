@@ -1110,14 +1110,16 @@ export function PrintSchedulePage({ onBack }) {
       return;
     }
 
-    // iOS: fire a window event so App can render PrintCalendarView at the top level
-    // (replacing the entire app DOM, not just overlaying it)
+    // iOS: store in localStorage and navigate to /print.html
+    // This is a static HTML file — no React bundle, no JS framework, just pure HTML
+    // iOS loads it fresh, renders the calendar immediately, orientation changes re-load the same static file
     const payload = {
       months: months.map(m => ({ ...m, scheduleData: m.scheduleData })),
       providers: providers.map(p => ({ id: p.id, name: p.name, color: p.color, initials: p.initials, avatar_url: p.avatar_url })),
       logoDataUrl,
     };
-    window.dispatchEvent(new CustomEvent("beaches-print", { detail: payload }));
+    localStorage.setItem("printData", JSON.stringify(payload));
+    window.location.href = "/print.html";
   };
 
   return (
