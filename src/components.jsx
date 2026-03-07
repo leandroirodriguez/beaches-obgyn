@@ -1007,8 +1007,6 @@ export function PrintSchedulePage({ onBack }) {
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [logoDataUrl, setLogoDataUrl] = useState(null);
-  const [printData, setPrintData] = useState(null); // when set, renders calendar overlay
-  const printRef = useRef(null);
 
   const monthOptions = [];
   for (let i = -6; i <= 12; i++) {
@@ -1039,17 +1037,6 @@ export function PrintSchedulePage({ onBack }) {
   }, []);
 
   useEffect(() => { fetchProviders().then(setProviders); }, []);
-
-  // After printData renders into DOM, call window.print()
-  useEffect(() => {
-    if (!printData || !printRef.current) return;
-    // Two rAF cycles ensure iOS has fully painted the new content
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      window.print();
-      // After print dialog closes, go back to normal
-      setTimeout(() => setPrintData(null), 500);
-    }));
-  }, [printData]);
 
   const handlePrint = async () => {
     if (selectedMonths.length === 0) return;
@@ -1123,53 +1110,13 @@ export function PrintSchedulePage({ onBack }) {
       return;
     }
 
-    // iOS: set printData state — triggers re-render with calendar visible on screen
-    setPrintData({ months, avatarMap });
+    // iOS: store structured data and navigate to print route
+    // PrintRenderer reads this synchronously on fresh page load — calendar is the FIRST paint
+    const payload = JSON.stringify({ months, avatarMap, logoDataUrl, providers });
+    try { sessionStorage.setItem("printData", payload); } catch(e) {}
+    try { localStorage.setItem("printData", payload); } catch(e) {}
+    window.location.href = "/?print=1";
   };
-
-  // iOS print overlay — rendered as real React DOM so iOS can see it
-  if (printData) {
-    const { months, avatarMap } = printData;
-    return (
-      <div ref={printRef} style={{position:"fixed", inset:0, zIndex:9999, background:"#fff", overflowY:"auto"}}>
-        {months.map(({ year, month, scheduleData, cells, numRows }) => {
-          const firstDay = getFirst(year, month);
-          const monthName = MONTHS[month];
-          return (
-            <div key={`${year}-${month}`} style={{width:"100%", minHeight:"100vh", boxSizing:"border-box", background:"#fff", pageBreakAfter:"always", display:"flex", flexDirection:"column", padding:"12px 14px"}}>
-              <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8, borderBottom:"2px solid #1a8c78", paddingBottom:6, flexShrink:0}}>
-                {logoDataUrl ? <img src={logoDataUrl} style={{height:32, objectFit:"contain"}}/> : <span style={{fontWeight:900, fontSize:15, color:"#1a8c78"}}>Beaches OBGYN</span>}
-                <div style={{textAlign:"right"}}><div style={{fontSize:17, fontWeight:900, color:"#1a3a35"}}>{monthName} {year}</div><div style={{fontSize:8, color:"#888"}}>Call Schedule</div></div>
-              </div>
-              <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:2, flexShrink:0}}>
-                {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i) => <div key={d} style={{textAlign:"center", padding:"2px 0", fontSize:8, fontWeight:900, color:i===0||i===6?"#e05c5c":"#1a8c78", background:"#f0faf8", borderRadius:3}}>{d}</div>)}
-              </div>
-              <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", gridTemplateRows:`repeat(${numRows},1fr)`, gap:2, flex:1}}>
-                {cells.map((d, i) => {
-                  if (!d) return <div key={i} style={{background:"#fafafa", borderRadius:4}}/>;
-                  const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-                  const prov = scheduleData?.[dateKey];
-                  const dow = (firstDay + d - 1) % 7;
-                  const isWeekend = dow === 0 || dow === 6;
-                  const b64 = prov ? avatarMap[prov.id] : null;
-                  return (
-                    <div key={i} style={{border:`1px solid ${prov?prov.color+"55":"#e8e8e8"}`, borderTop:`3px solid ${prov?prov.color:"#e8e8e8"}`, borderRadius:4, padding:"3px 4px", background:isWeekend?"#fdf8f8":"#fff", display:"flex", flexDirection:"column", overflow:"hidden"}}>
-                      <div style={{fontSize:10, fontWeight:800, color:isWeekend?"#e05c5c":"#1a3a35", marginBottom:2}}>{d}</div>
-                      {b64 ? <img src={b64} style={{width:20, height:20, borderRadius:"50%", objectFit:"cover", marginBottom:2, border:`2px solid ${prov.color}`, display:"block"}}/> : prov ? <div style={{width:20, height:20, borderRadius:"50%", background:prov.color, marginBottom:2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:7, fontWeight:900, color:"#fff"}}>{prov.initials}</div> : null}
-                      {prov && <div style={{fontSize:"7.5px", fontWeight:700, color:"#333", lineHeight:1.2}}>{prov.name.replace("Dr. ","")}</div>}
-                    </div>
-                  );
-                })}
-              </div>
-              <div style={{marginTop:4, paddingTop:4, borderTop:"1px solid #e8e8e8", display:"flex", flexWrap:"wrap", gap:"2px 10px", flexShrink:0}}>
-                {providers.map(p => { const b64 = avatarMap[p.id]; return <div key={p.id} style={{display:"flex", alignItems:"center", gap:4}}>{b64 ? <img src={b64} style={{width:10, height:10, borderRadius:"50%", objectFit:"cover"}}/> : <div style={{width:8, height:8, borderRadius:"50%", background:p.color}}/>}<span style={{fontSize:7, color:"#555", fontWeight:600}}>{p.name}</span></div>; })}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
 
   return (
     <div style={{paddingBottom:20}}>
@@ -2859,25 +2806,88 @@ export function FairnessPage({ onBack }) {
 
 // Renders calendar-only page from sessionStorage, auto-prints, then redirects back
 export function PrintRenderer() {
+  // Read structured data synchronously — before first render
+  let printData = null;
+  try {
+    const raw = sessionStorage.getItem("printData") || localStorage.getItem("printData");
+    if (raw) printData = JSON.parse(raw);
+    sessionStorage.removeItem("printData");
+    localStorage.removeItem("printData");
+  } catch(e) {}
+
+  // If no data, redirect immediately
+  if (!printData) {
+    if (typeof window !== "undefined") window.location.href = "/";
+    return null;
+  }
+
+  const { months, avatarMap, logoDataUrl, providers } = printData;
+
+  // Render calendar as JSX — this IS the first paint, so iOS sees it immediately
+  return (
+    <PrintCalendarView
+      months={months}
+      avatarMap={avatarMap}
+      logoDataUrl={logoDataUrl}
+      providers={providers}
+    />
+  );
+}
+
+function PrintCalendarView({ months, avatarMap, logoDataUrl, providers }) {
   useEffect(() => {
-    const html = sessionStorage.getItem("printHtml") || localStorage.getItem("printHtml");
-    sessionStorage.removeItem("printHtml");
-    localStorage.removeItem("printHtml");
-
-    if (!html) { window.location.href = "/"; return; }
-
-    document.head.innerHTML = `<meta charset="utf-8"><meta name="viewport" content="width=device-width"/><style>*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:-apple-system,Helvetica,sans-serif;}body{background:#fff;}@page{margin:0.2in;}</style>`;
-    document.body.innerHTML = html;
-
-    setTimeout(() => {
+    const t = setTimeout(() => {
       window.print();
-      setTimeout(() => { window.location.href = "/"; }, 500);
-    }, 600);
+    }, 300);
+
+    // Navigate home only after print dialog is fully closed
+    const onAfter = () => { window.location.href = "/"; };
+    window.addEventListener("afterprint", onAfter);
+
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("afterprint", onAfter);
+    };
   }, []);
 
   return (
-    <div style={{display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", fontFamily:"-apple-system,Helvetica,sans-serif"}}>
-      <p style={{color:"#555", fontSize:14}}>Preparing print…</p>
+    <div style={{background:"#fff", fontFamily:"-apple-system,Helvetica,sans-serif"}}>
+      <style>{`*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;}@page{margin:0.2in;}`}</style>
+      {months.map(({ year, month, scheduleData, cells, numRows }) => {
+        const firstDay = getFirst(year, month);
+        const monthName = MONTHS[month];
+        return (
+          <div key={`${year}-${month}`} style={{width:"100%", minHeight:"100vh", background:"#fff", pageBreakAfter:"always", display:"flex", flexDirection:"column", padding:"12px 14px", boxSizing:"border-box"}}>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8, borderBottom:"2px solid #1a8c78", paddingBottom:6, flexShrink:0}}>
+              {logoDataUrl ? <img src={logoDataUrl} style={{height:32, objectFit:"contain"}}/> : <span style={{fontWeight:900, fontSize:15, color:"#1a8c78"}}>Beaches OBGYN</span>}
+              <div style={{textAlign:"right"}}><div style={{fontSize:17, fontWeight:900, color:"#1a3a35"}}>{monthName} {year}</div><div style={{fontSize:8, color:"#888"}}>Call Schedule</div></div>
+            </div>
+            <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:2, marginBottom:2, flexShrink:0}}>
+              {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i) => <div key={d} style={{textAlign:"center", padding:"2px 0", fontSize:8, fontWeight:900, color:i===0||i===6?"#e05c5c":"#1a8c78", background:"#f0faf8", borderRadius:3}}>{d}</div>)}
+            </div>
+            <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", gridTemplateRows:`repeat(${numRows},1fr)`, gap:2, flex:1}}>
+              {cells.map((d, i) => {
+                if (!d) return <div key={i} style={{background:"#fafafa", borderRadius:4}}/>;
+                const dateKey = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+                const prov = scheduleData?.[dateKey];
+                const dow = (firstDay + d - 1) % 7;
+                const isWeekend = dow === 0 || dow === 6;
+                const b64 = prov ? avatarMap[prov.id] : null;
+                return (
+                  <div key={i} style={{border:`1px solid ${prov?prov.color+"55":"#e8e8e8"}`, borderTop:`3px solid ${prov?prov.color:"#e8e8e8"}`, borderRadius:4, padding:"3px 4px", background:isWeekend?"#fdf8f8":"#fff", display:"flex", flexDirection:"column", overflow:"hidden"}}>
+                    <div style={{fontSize:10, fontWeight:800, color:isWeekend?"#e05c5c":"#1a3a35", marginBottom:2}}>{d}</div>
+                    {b64 ? <img src={b64} style={{width:20, height:20, borderRadius:"50%", objectFit:"cover", marginBottom:2, border:`2px solid ${prov.color}`, display:"block"}}/> : prov ? <div style={{width:20, height:20, borderRadius:"50%", background:prov.color, marginBottom:2, display:"flex", alignItems:"center", justifyContent:"center", fontSize:7, fontWeight:900, color:"#fff"}}>{prov.initials}</div> : null}
+                    {prov && <div style={{fontSize:"7.5px", fontWeight:700, color:"#333", lineHeight:1.2}}>{prov.name.replace("Dr. ","")}</div>}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{marginTop:4, paddingTop:4, borderTop:"1px solid #e8e8e8", display:"flex", flexWrap:"wrap", gap:"2px 10px", flexShrink:0}}>
+              {providers.map(p => { const b64 = avatarMap[p.id]; return <div key={p.id} style={{display:"flex", alignItems:"center", gap:4}}>{b64 ? <img src={b64} style={{width:10, height:10, borderRadius:"50%", objectFit:"cover"}}/> : <div style={{width:8, height:8, borderRadius:"50%", background:p.color}}/>}<span style={{fontSize:7, color:"#555", fontWeight:600}}>{p.name}</span></div>; })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
