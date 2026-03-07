@@ -1,10 +1,6 @@
-// Bypass cache entirely for print.html — always fetch from network
 self.addEventListener("fetch", event => {
-  if (event.request.url.includes("/print.html")) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-  // Default browser behavior for everything else
+  // Always fetch from network — no caching, no interference
+  event.respondWith(fetch(event.request));
 });
 
 self.addEventListener("push", event => {
