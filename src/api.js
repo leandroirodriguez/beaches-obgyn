@@ -31,7 +31,6 @@ export async function fetchRequests(providerId = null) {
   return data || [];
 }
 
-// Fetch switch requests where the current provider is the target (incoming requests)
 export async function fetchIncomingSwitchRequests(providerId) {
   const { data, error } = await supabase
     .from("requests")
@@ -158,14 +157,12 @@ export async function uploadAvatar(providerId, file) {
     .upload(path, file, { upsert: true, contentType: file.type });
   if (uploadError) { console.error("uploadAvatar:", uploadError); return null; }
   const { data } = supabase.storage.from("provider-avatars").getPublicUrl(path);
-  // Store clean URL in DB, no timestamp
   const cleanUrl = data.publicUrl;
   const { error: updateError } = await supabase
     .from("providers")
     .update({ avatar_url: cleanUrl })
     .eq("id", providerId);
   if (updateError) { console.error("updateAvatar:", updateError); return null; }
-  // Return URL with cache-bust so the uploader sees new photo immediately
   return `${cleanUrl}?t=${Date.now()}`;
 }
 
@@ -182,7 +179,6 @@ export async function executeCallSwitch(requestId, requesterProviderId, targetPr
     .eq("date", targetDate);
   if (e2) { console.error("executeCallSwitch e2:", e2); return false; }
 
-  // If either date is a Saturday, mirror to Sunday
   for (const [date, providerId] of [[requesterDate, targetProviderId], [targetDate, requesterProviderId]]) {
     const d = new Date(date + "T00:00:00");
     if (d.getDay() === 6) {
@@ -193,7 +189,6 @@ export async function executeCallSwitch(requestId, requesterProviderId, targetPr
     }
   }
 
-  // Mark request as Approved
   const { error: e3 } = await supabase.from("requests").update({ status: "Approved" }).eq("id", requestId);
   if (e3) { console.error("executeCallSwitch e3:", e3); return false; }
 
@@ -253,6 +248,16 @@ export async function updateProviderPrefs(providerId, prefs) {
   return !error;
 }
 
+export async function updateProviderProfile(providerId, { full_name, phone, display_name }) {
+  const { error } = await supabase
+    .from("providers")
+    .update({ full_name, phone, display_name })
+    .eq("id", providerId);
+  if (error) console.error("updateProviderProfile:", error);
+  if (error) throw error;
+  return true;
+}
+
 export async function registerPushSubscription(providerId, subscription) {
   const { endpoint, keys: { p256dh, auth } } = subscription.toJSON();
   const { error } = await supabase.from("push_subscriptions").upsert(
@@ -265,7 +270,6 @@ export async function registerPushSubscription(providerId, subscription) {
 
 export async function sendPushNotification({ providerIds, title, body, data = {}, notifKey = null }) {
   try {
-    // Filter out providers who have disabled this notification type
     let filteredIds = providerIds;
     if (notifKey) {
       const { data: provs } = await supabase.from("providers").select("id, notif_prefs").in("id", providerIds);
@@ -281,9 +285,7 @@ export async function sendPushNotification({ providerIds, title, body, data = {}
       }
     }
     if (filteredIds.length === 0) return;
-    // Save in-app notification for each provider
     await Promise.all(filteredIds.map(id => createNotification({ providerId: id, title, body })));
-    // Send push
     await fetch("/api/send-push", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

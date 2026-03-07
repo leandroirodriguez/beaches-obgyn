@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs, updateProviderProfile } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -2468,17 +2468,22 @@ export function NotificationsPage({ onBack, currentProvider, onNavigate }) {
     return `${Math.floor(diff/86400)}d ago`;
   };
 
-  const getAction = (title) => {
-    if (title?.includes("New Time-Off Request") || title?.includes("New No-Call")) return "admin-requests";
-    if (title?.includes("Switch Accepted") || title?.includes("Switch Declined") || title?.includes("Approved") || title?.includes("Denied")) return "my-requests";
-    if (title?.includes("Call Switch Request")) return "my-requests";
-    if (title?.includes("Schedule")) return "home";
-    if (title?.includes("Message")) return "messages";
+  const getAction = (n) => {
+    const title = n.title || "";
+    if (title.includes("New Time-Off Request") || title.includes("New No-Call")) return "admin-requests";
+    if (title.includes("Switch Accepted") || title.includes("Switch Declined") || title.includes("Approved") || title.includes("Denied")) return "my-requests";
+    if (title.includes("Call Switch Request")) return "my-requests";
+    if (title.includes("Schedule")) return "home";
+    if (title.includes("Message from ")) {
+      // Extract sender name from title "Message from Dr. X"
+      const senderName = title.replace("Message from ", "").trim();
+      return `messages:${senderName}`;
+    }
     return null;
   };
 
   const handleTap = (n) => {
-    const action = getAction(n.title);
+    const action = getAction(n);
     if (action && onNavigate) onNavigate(action);
   };
 
@@ -2497,7 +2502,7 @@ export function NotificationsPage({ onBack, currentProvider, onNavigate }) {
         </div>
       )}
       {notifs.map(n => {
-        const action = getAction(n.title);
+        const action = getAction(n);
         return (
           <div key={n.id} onClick={() => handleTap(n)} style={card({
             padding:"13px 16px", marginBottom:10,
@@ -2526,11 +2531,36 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
   const [notifs, setNotifs] = useState(defaultPrefs);
   const [showPwForm, setShowPwForm] = useState(false);
 
+  // Profile fields
+  const [fullName, setFullName]       = useState("");
+  const [phone, setPhone]             = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMsg, setProfileMsg]   = useState(null);
+
   useEffect(() => {
     if (currentProvider?.notif_prefs) {
       setNotifs({ ...defaultPrefs, ...currentProvider.notif_prefs });
     }
+    if (currentProvider) {
+      setFullName(currentProvider.full_name || "");
+      setPhone(currentProvider.phone || "");
+      setDisplayName(currentProvider.display_name || "");
+    }
   }, [currentProvider]);
+
+  const handleSaveProfile = async () => {
+    if (!currentProvider) return;
+    setProfileSaving(true); setProfileMsg(null);
+    try {
+      await updateProviderProfile(currentProvider.id, { full_name: fullName, phone, display_name: displayName });
+      setProfileMsg({ ok: true, text: "Profile saved!" });
+      setTimeout(() => setProfileMsg(null), 2500);
+    } catch {
+      setProfileMsg({ ok: false, text: "Failed to save. Please try again." });
+    }
+    setProfileSaving(false);
+  };
 
   const handleToggleNotif = (key, val) => {
     const updated = { ...notifs, [key]: val };
@@ -2581,12 +2611,20 @@ export function SettingsPage({ onBack, onLogout, currentProvider }) {
             <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{currentProvider?.email}</p>
           </div>
         </div>
-        {["Full Name","Phone Number","Display Name"].map(f => (
-          <div key={f} style={{marginBottom:10}}>
-            <span style={lblS}>{f}</span>
-            <input style={inpS} placeholder={f}/>
+        {[
+          ["Full Name", fullName, setFullName, "text", "e.g. Dr. Jane Smith"],
+          ["Phone Number", phone, setPhone, "tel", "e.g. (904) 555-1234"],
+          ["Display Name", displayName, setDisplayName, "text", "Short name shown in app"],
+        ].map(([label, val, setter, type, placeholder]) => (
+          <div key={label} style={{marginBottom:10}}>
+            <span style={lblS}>{label}</span>
+            <input style={inpS} type={type} placeholder={placeholder} value={val} onChange={e => setter(e.target.value)}/>
           </div>
         ))}
+        {profileMsg && <p style={{margin:"0 0 8px", fontFamily:ffb, fontSize:12, color: profileMsg.ok ? C.teal : C.coral}}>{profileMsg.text}</p>}
+        <button onClick={handleSaveProfile} disabled={profileSaving} style={btnS({width:"100%", padding:"10px", opacity: profileSaving ? 0.6 : 1})}>
+          {profileSaving ? "Saving…" : "Save Profile"}
+        </button>
       </div>
       <div style={card({padding:"16px", marginBottom:12})}>
         <p style={{margin:"0 0 14px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>Security</p>

@@ -135,11 +135,21 @@ function AppInner() {
 
   useEffect(() => {
     const bc = new BroadcastChannel("notif_nav");
-    bc.onmessage = (event) => {
+    bc.onmessage = async (event) => {
       const action = event.data?.action;
-      if (action === "admin-requests") setSub("admin");
+      const senderId = event.data?.senderId;
+      if (action === "admin-requests") { setSub(null); setSub("admin"); }
       else if (action === "my-requests") { setSub(null); setTab("request"); }
-      else if (action === "messages") { setSub(null); setTab("request"); }
+      else if (action === "messages") {
+        if (senderId) {
+          // Fetch provider and open messages directly
+          const { fetchProviders } = await import("./api");
+          const all = await fetchProviders();
+          const sender = all.find(p => p.id === senderId);
+          if (sender) { setMsgRecip(sender); setSub("messages"); return; }
+        }
+        setSub(null); setTab("request");
+      }
       else if (action === "home") { setSub(null); setTab("home"); }
     };
     return () => bc.close();
@@ -205,12 +215,25 @@ function AppInner() {
     if (currentProvider) markNotificationsRead(currentProvider.id);
   };
 
-  const handleNotifNavigate = (action) => {
+  const handleNotifNavigate = async (action) => {
     setSub(null);
-    if (action === "admin-requests") setSub("admin");
-    else if (action === "my-requests") setTab("request");
-    else if (action === "messages") setTab("request");
-    else if (action === "home") setTab("home");
+    if (action === "admin-requests") { setSub("admin"); }
+    else if (action === "my-requests") { setTab("request"); }
+    else if (action === "home") { setTab("home"); }
+    else if (action.startsWith("messages:")) {
+      const senderName = action.replace("messages:", "").trim();
+      // Look up the provider by name so we can open MessagesPage with them
+      const { fetchProviders } = await import("./api");
+      const all = await fetchProviders();
+      const sender = all.find(p => p.name === senderName || p.name.includes(senderName));
+      if (sender) {
+        setMsgRecip(sender);
+        setSub("messages");
+      } else {
+        // Fallback: open request tab
+        setTab("request");
+      }
+    }
   };
 
   function renderBody() {
