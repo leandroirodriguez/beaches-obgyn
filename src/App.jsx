@@ -207,6 +207,14 @@ function AppInner() {
     if (currentProvider) markNotificationsRead(currentProvider.id);
   };
 
+  const handleNotifNavigate = (action) => {
+    setSub(null);
+    if (action === "admin-requests") setSub("admin");
+    else if (action === "my-requests") setTab("request");
+    else if (action === "messages") setTab("request");
+    else if (action === "home") setTab("home");
+  };
+
   function renderBody() {
     if (sub === "messages")      return <MessagesPage recipient={msgRecip} onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (sub === "admin")         return <AdminPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
@@ -215,7 +223,7 @@ function AppInner() {
     if (sub === "logic")         return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (sub === "print")         return <PrintSchedulePage onBack={()=>setSub(null)}/>;
     if (sub === "settings")      return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider}/>;
-    if (sub === "notifications") return <NotificationsPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (sub === "notifications") return <NotificationsPage onBack={()=>setSub(null)} currentProvider={currentProvider} onNavigate={handleNotifNavigate}/>;
     if (tab === "home")      return <HomePage currentProvider={currentProvider}/>;
     if (tab === "providers") return <ProvidersPage onMessage={onMessage} currentProvider={currentProvider}/>;
     if (tab === "request")   return <RequestPage currentProvider={currentProvider}/>;
@@ -250,26 +258,23 @@ export default function App() {
   const [printPayload, setPrintPayload] = useState(null);
   const isPrintRoute = new URLSearchParams(window.location.search).get("print") === "1";
 
-  // Listen for beaches-print event from PrintSchedulePage
   useEffect(() => {
     const handler = (e) => setPrintPayload(e.detail);
     window.addEventListener("beaches-print", handler);
     return () => window.removeEventListener("beaches-print", handler);
   }, []);
 
-  // Trigger print after PrintCalendarView renders at top level
   useEffect(() => {
     if (!printPayload) return;
     const t = setTimeout(() => {
       window.print();
       const done = () => setPrintPayload(null);
       window.addEventListener("afterprint", done, { once: true });
-      setTimeout(done, 30000); // iOS fallback — afterprint may not fire
+      setTimeout(done, 30000);
     }, 1500);
     return () => clearTimeout(t);
   }, [printPayload]);
 
-  // iOS: PrintCalendarView renders as the ENTIRE app — no header, no nav, nothing else in DOM
   if (printPayload) {
     return <PrintCalendarView
       months={printPayload.months}
