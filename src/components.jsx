@@ -1965,7 +1965,8 @@ function HistoryImporter({ providers }) {
       {/* Provider rows for active month */}
       <div style={{display:"flex", flexDirection:"column", gap:10, marginBottom:16}}>
         {providers.map(p => {
-          const m = counts[p.id]?.[activeMonth] || { weekday:0, friday:0, weekend:0 };          return (
+          const m = counts[p.id]?.[activeMonth] || { weekday:0, friday:0, weekend:0 };
+          return (
             <div key={p.id} style={card({padding:"12px 14px"})}>
               <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}>
                 <Avatar p={p} size={32} ring/>
