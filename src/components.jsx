@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs, updateProviderProfile } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs, updateProviderProfile, fetchScheduleLocks, lockMonth, unlockMonth } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -1488,8 +1488,9 @@ function AIScheduleGenerator() {
   const [error, setError]             = useState(null);
   const [month, setMonth]             = useState(new Date().getMonth());
   const [year, setYear]               = useState(new Date().getFullYear());
-  const [originYM, setOriginYM]       = useState(null);   // { year, month } of earliest scheduled month
-  const [completeMonths, setCompleteMonths] = useState({}); // "YYYY-M" -> true/false
+  const [originYM, setOriginYM]       = useState(null);
+  const [completeMonths, setCompleteMonths] = useState({});
+  const [lockedMonths, setLockedMonths] = useState(new Set());
 
   // On mount: find the origin month (earliest month with ANY schedule data)
   // then check completeness of every month from origin up to 12 months ahead
@@ -1540,6 +1541,7 @@ function AIScheduleGenerator() {
       setChecking(false);
     }
     init();
+    fetchScheduleLocks().then(setLockedMonths);
   }, []);
 
   const refreshCompleteness = async () => {
@@ -1579,8 +1581,10 @@ function AIScheduleGenerator() {
     });
   };
 
+  const isMonthLocked = (y, m) => lockedMonths.has(`${y}-${String(m + 1).padStart(2, "0")}`);
+
   const selectedBlocking = getBlockingMonths(year, month);
-  const isBlocked = selectedBlocking.length > 0;
+  const isBlocked = selectedBlocking.length > 0 || isMonthLocked(year, month);
 
   // Build year options: current year and next 2
   const thisYear = new Date().getFullYear();
@@ -1714,9 +1718,10 @@ function AIScheduleGenerator() {
                 {MONTHS.map((m, i) => {
                   const blocking = getBlockingMonths(year, i);
                   const blocked  = blocking.length > 0;
+                  const locked   = isMonthLocked(year, i);
                   return (
-                    <option key={i} value={i} disabled={blocked}>
-                      {m}{blocked ? " ⚠ incomplete prior months" : ""}
+                    <option key={i} value={i} disabled={blocked || locked}>
+                      {m}{locked ? " 🔒 locked" : blocked ? " ⚠ incomplete prior months" : ""}
                     </option>
                   );
                 })}
@@ -1749,6 +1754,18 @@ function AIScheduleGenerator() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Locked warning */}
+            {!bulk && isMonthLocked(year, month) && (
+              <div style={{padding:"10px 12px", borderRadius:8, marginBottom:12, background:"#f0f9ff", border:"1px solid #0ea5e9"}}>
+                <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:12, color:"#0369a1"}}>
+                  🔒 {MONTHS[month]} {year} is locked
+                </p>
+                <p style={{margin:"4px 0 0", fontFamily:ffb, fontSize:11, color:"#0369a1"}}>
+                  This month is locked to prevent accidental re-generation. Unlock it in Admin Panel → Schedule → Edit Schedule.
+                </p>
               </div>
             )}
 
@@ -2004,10 +2021,12 @@ function ScheduleEditor({ providers }) {
   const [mo, setMo]           = useState(today.getMonth());
   const [schedule, setSchedule] = useState({});
   const [loading, setLoading]   = useState(true);
-  const [selected, setSelected] = useState(null); // { dateKey, d, current }
+  const [selected, setSelected] = useState(null);
   const [saving, setSaving]         = useState(false);
   const [savedFlash, setSavedFlash]   = useState(null);
   const [approvedRequests, setApprovedRequests] = useState([]);
+  const [lockedMonths, setLockedMonths] = useState(new Set());
+  const [lockSaving, setLockSaving] = useState(false);
 
   const prevMo = () => mo === 0 ? (setMo(11), setYr(y => y-1)) : setMo(m => m-1);
   const nextMo = () => mo === 11 ? (setMo(0), setYr(y => y+1)) : setMo(m => m+1);
@@ -2021,7 +2040,23 @@ function ScheduleEditor({ providers }) {
     fetchRequests().then(reqs => {
       setApprovedRequests(reqs.filter(r => r.status === "Approved" && r.start_date && r.end_date));
     });
+    fetchScheduleLocks().then(setLockedMonths);
   }, []);
+
+  const monthKey = `${yr}-${String(mo + 1).padStart(2, "0")}`;
+  const isLocked = lockedMonths.has(monthKey);
+
+  const handleToggleLock = async () => {
+    setLockSaving(true);
+    if (isLocked) {
+      await unlockMonth(yr, mo);
+      setLockedMonths(prev => { const n = new Set(prev); n.delete(monthKey); return n; });
+    } else {
+      await lockMonth(yr, mo, "admin");
+      setLockedMonths(prev => new Set([...prev, monthKey]));
+    }
+    setLockSaving(false);
+  };
 
   // Returns true if provider has approved time off on the given dateKey
   const isOnVacation = (provider, dateKey) => {
@@ -2167,6 +2202,22 @@ function ScheduleEditor({ providers }) {
         <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>{MONTHS[mo]} {yr}</span>
         <button onClick={nextMo} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary, padding:"0 8px"}}>›</button>
       </div>
+
+      {/* Lock/Unlock button */}
+      <button
+        onClick={handleToggleLock}
+        disabled={lockSaving}
+        style={{
+          width:"100%", marginBottom:12, padding:"9px", borderRadius:8,
+          border:`1.5px solid ${isLocked ? "#0ea5e9" : C.greyMid}`,
+          background: isLocked ? "#f0f9ff" : "#fff",
+          color: isLocked ? "#0369a1" : C.sub,
+          fontFamily:ff, fontWeight:800, fontSize:12, cursor:"pointer",
+          opacity: lockSaving ? 0.6 : 1,
+          display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+        }}>
+        {lockSaving ? "Saving…" : isLocked ? "🔒 Locked — Tap to Unlock" : "🔓 Unlocked — Tap to Lock"}
+      </button>
 
       <div style={card({padding:"12px"})}>
         {/* Weekday headers */}

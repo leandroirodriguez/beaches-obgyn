@@ -295,3 +295,24 @@ export async function sendPushNotification({ providerIds, title, body, data = {}
     console.error("sendPushNotification:", err);
   }
 }
+
+export async function fetchScheduleLocks() {
+  const { data, error } = await supabase.from("schedule_locks").select("month");
+  if (error) console.error("fetchScheduleLocks:", error);
+  return new Set((data || []).map(r => r.month));
+}
+
+export async function lockMonth(year, month, email) {
+  const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const { error } = await supabase.from("schedule_locks")
+    .upsert({ month: key, locked_by: email, locked_at: new Date().toISOString() });
+  if (error) console.error("lockMonth:", error);
+  return !error;
+}
+
+export async function unlockMonth(year, month) {
+  const key = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const { error } = await supabase.from("schedule_locks").delete().eq("month", key);
+  if (error) console.error("unlockMonth:", error);
+  return !error;
+}
