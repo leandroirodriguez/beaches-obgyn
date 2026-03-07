@@ -1826,6 +1826,198 @@ function AIScheduleGenerator() {
   );
 }
 
+function ScheduleEditor({ providers }) {
+  const today = new Date();
+  const [yr, setYr]           = useState(today.getFullYear());
+  const [mo, setMo]           = useState(today.getMonth());
+  const [schedule, setSchedule] = useState({});
+  const [loading, setLoading]   = useState(true);
+  const [selected, setSelected] = useState(null); // { dateKey, d, current }
+  const [saving, setSaving]     = useState(false);
+  const [savedFlash, setSavedFlash] = useState(null); // dateKey that just saved
+
+  const prevMo = () => mo === 0 ? (setMo(11), setYr(y => y-1)) : setMo(m => m-1);
+  const nextMo = () => mo === 11 ? (setMo(0), setYr(y => y+1)) : setMo(m => m+1);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchSchedule(yr, mo).then(data => { setSchedule(data); setLoading(false); });
+  }, [yr, mo]);
+
+  const days  = getDays(yr, mo);
+  const first = getFirst(yr, mo);
+  const cells = [];
+  for (let i = 0; i < first; i++) cells.push(null);
+  for (let d = 1; d <= days; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const isToday = d => yr === today.getFullYear() && mo === today.getMonth() && d === today.getDate();
+
+  const handleDayTap = (d) => {
+    const dateKey = dkey(yr, mo, d);
+    const current = schedule[dateKey] || null;
+    setSelected({ dateKey, d, current });
+  };
+
+  const handleAssign = async (provider) => {
+    if (!selected) return;
+    setSaving(true);
+    const { dateKey } = selected;
+
+    // Update in DB
+    await updateScheduleDate(dateKey, provider.email);
+
+    // If Saturday, mirror to Sunday
+    const dt = new Date(dateKey + "T00:00:00");
+    if (dt.getDay() === 6) {
+      const sun = new Date(dt);
+      sun.setDate(sun.getDate() + 1);
+      const sunKey = `${sun.getFullYear()}-${String(sun.getMonth()+1).padStart(2,"0")}-${String(sun.getDate()).padStart(2,"0")}`;
+      await updateScheduleDate(sunKey, provider.email);
+      setSchedule(prev => ({ ...prev, [sunKey]: provider }));
+    }
+
+    // Update local state immediately
+    setSchedule(prev => ({ ...prev, [dateKey]: provider }));
+    setSavedFlash(dateKey);
+    setTimeout(() => setSavedFlash(null), 1200);
+    setSaving(false);
+    setSelected(null);
+  };
+
+  const handleClear = async () => {
+    if (!selected) return;
+    setSaving(true);
+    const { dateKey } = selected;
+
+    // Delete from DB
+    const { error } = await supabase
+      .from("call_schedule")
+      .delete()
+      .eq("date", dateKey);
+
+    if (!error) {
+      // Mirror Sunday clear if Saturday
+      const dt = new Date(dateKey + "T00:00:00");
+      if (dt.getDay() === 6) {
+        const sun = new Date(dt);
+        sun.setDate(sun.getDate() + 1);
+        const sunKey = `${sun.getFullYear()}-${String(sun.getMonth()+1).padStart(2,"0")}-${String(sun.getDate()).padStart(2,"0")}`;
+        await supabase.from("call_schedule").delete().eq("date", sunKey);
+        setSchedule(prev => { const n = {...prev}; delete n[sunKey]; return n; });
+      }
+      setSchedule(prev => { const n = {...prev}; delete n[dateKey]; return n; });
+    }
+    setSaving(false);
+    setSelected(null);
+  };
+
+  return (
+    <div style={{paddingBottom:20}}>
+      {/* Bottom sheet overlay */}
+      {selected && (
+        <div style={{position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.4)", zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center"}}
+          onClick={() => setSelected(null)}>
+          <div onClick={e => e.stopPropagation()} style={{background:C.bg, borderRadius:"16px 16px 0 0", padding:"20px 16px 36px", width:"100%", maxWidth:430}}>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16}}>
+              <div>
+                <p style={{margin:0, fontFamily:ff, fontWeight:900, fontSize:15, color:C.text}}>
+                  {new Date(selected.dateKey + "T00:00:00").toLocaleDateString("en-US", {weekday:"long", month:"long", day:"numeric"})}
+                </p>
+                <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>
+                  {selected.current ? `Currently: ${selected.current.name}` : "No provider assigned"}
+                </p>
+              </div>
+              <button onClick={() => setSelected(null)} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.sub}}>✕</button>
+            </div>
+
+            <p style={{margin:"0 0 10px", fontFamily:ff, fontWeight:800, fontSize:11, color:C.sub, textTransform:"uppercase", letterSpacing:1}}>Assign Provider</p>
+            <div style={{display:"flex", flexDirection:"column", gap:8, marginBottom:12}}>
+              {providers.map(p => {
+                const isCurrent = selected.current?.id === p.id;
+                return (
+                  <div key={p.id} onClick={() => !saving && handleAssign(p)} style={{
+                    display:"flex", alignItems:"center", gap:12, padding:"10px 14px",
+                    borderRadius:10, cursor:"pointer",
+                    border:`2px solid ${isCurrent ? p.color : C.grey}`,
+                    background: isCurrent ? `${p.color}15` : "#fff",
+                    opacity: saving ? 0.6 : 1,
+                  }}>
+                    <Avatar p={p} size={36} ring/>
+                    <div style={{flex:1}}>
+                      <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{p.name}</p>
+                      <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{p.credentials}</p>
+                    </div>
+                    {isCurrent && <span style={{color:p.color, fontWeight:900, fontSize:14}}>✓</span>}
+                  </div>
+                );
+              })}
+            </div>
+            {selected.current && (
+              <button onClick={() => !saving && handleClear()} disabled={saving}
+                style={oBtnS({width:"100%", padding:"10px", color:C.coral, borderColor:C.coral, opacity: saving ? 0.6 : 1})}>
+                {saving ? "Saving…" : "Clear Assignment"}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Month navigator */}
+      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14}}>
+        <button onClick={prevMo} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary, padding:"0 8px"}}>‹</button>
+        <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text}}>{MONTHS[mo]} {yr}</span>
+        <button onClick={nextMo} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary, padding:"0 8px"}}>›</button>
+      </div>
+
+      <div style={card({padding:"12px"})}>
+        {/* Weekday headers */}
+        <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", marginBottom:6}}>
+          {WD_SHORT.map((w,i) => (
+            <div key={w} style={{textAlign:"center", fontFamily:ff, fontWeight:800, fontSize:11, color:i===0||i===6?C.coral:C.teal}}>{w}</div>
+          ))}
+        </div>
+
+        {loading
+          ? <div style={{textAlign:"center", padding:"20px", color:C.sub, fontFamily:ff, fontSize:13}}>Loading…</div>
+          : <div style={{display:"grid", gridTemplateColumns:"repeat(7,1fr)", gap:3}}>
+              {cells.map((d, i) => {
+                if (!d) return <div key={i}/>;
+                const dateKey = dkey(yr, mo, d);
+                const prov = schedule[dateKey];
+                const t = isToday(d);
+                const flash = savedFlash === dateKey;
+                const col = i % 7;
+                const isWEnd = col === 0 || col === 6;
+                return (
+                  <div key={i} onClick={() => handleDayTap(d)} style={{
+                    display:"flex", flexDirection:"column", alignItems:"center",
+                    padding:"4px 2px", borderRadius:8, cursor:"pointer", minHeight:56,
+                    background: flash ? `${C.teal}22` : t ? C.wave : isWEnd ? "#fdf8f8" : "#fafafa",
+                    border:`1.5px solid ${flash ? C.teal : prov ? prov.color+"55" : C.grey}`,
+                    transition:"background 0.3s",
+                  }}>
+                    <span style={{fontFamily:ff, fontWeight:t?900:700, fontSize:12, color:t?C.teal:isWEnd?C.coral:C.text, marginBottom:3}}>{d}</span>
+                    {prov
+                      ? <Avatar p={prov} size={28} ring/>
+                      : <div style={{width:28, height:28, borderRadius:"50%", background:C.grey, border:`1.5px dashed ${C.greyMid}`, display:"flex", alignItems:"center", justifyContent:"center"}}>
+                          <span style={{fontSize:14, color:C.greyMid}}>+</span>
+                        </div>
+                    }
+                  </div>
+                );
+              })}
+            </div>
+        }
+      </div>
+
+      <div style={{marginTop:12, padding:"10px 14px", borderRadius:8, background:`${C.wave}66`, border:`1px solid ${C.teal}33`}}>
+        <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.teal}}>Tap any day to assign or change the on-call provider. Saturday changes automatically mirror to Sunday.</p>
+      </div>
+    </div>
+  );
+}
+
 export function AdminPage({ onBack }) {
   const [tab, setTab]               = useState("requests");
   const [reqs, setReqs]             = useState([]);
@@ -2181,6 +2373,7 @@ export function AdminPage({ onBack }) {
           ["requests", "Requests"],
           ["nocall",   `No-Call${pendingNoCall > 0 ? ` (${pendingNoCall})` : ""}`],
           ["users",    "Users"],
+          ["schedule", "Schedule"],
         ].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             flex: 1, padding: "9px 2px", borderRadius: 6, border: "none",
@@ -2378,19 +2571,8 @@ export function AdminPage({ onBack }) {
         ))}
       </>}
 
-      {tab === "schedule" && (
-        <div>
-          <div style={card({padding:"14px", marginBottom:10})}>
-            <p style={{margin:"0 0 10px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>October 2026</p>
-            <div style={{display:"flex", gap:8}}>
-              <button style={oBtnS({flex:1, padding:"9px"})}>Lock</button>
-              <button style={oBtnS({flex:1, padding:"9px"})}>Unlock</button>
-              <button style={btnS({flex:1, padding:"9px", fontSize:12})}>Publish</button>
-            </div>
-          </div>
-          <button style={btnS()}>Export PDF</button>
-        </div>
-      )}
+      {tab === "schedule" && <ScheduleEditor providers={providers}/>}
+
     </div>
   );
 }
