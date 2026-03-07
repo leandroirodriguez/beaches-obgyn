@@ -1938,7 +1938,7 @@ function HistoryImporter({ providers }) {
     return t;
   };
 
-  if (!providers.length) return <div style={{padding:20, textAlign:"center", color:C.sub, fontFamily:ff}}>Loading…</div>;
+  if (!providers.length || !Object.keys(counts).length) return <div style={{padding:20, textAlign:"center", color:C.sub, fontFamily:ff}}>Loading…</div>;
 
   return (
     <div style={{paddingBottom:32}}>
@@ -1965,8 +1965,7 @@ function HistoryImporter({ providers }) {
       {/* Provider rows for active month */}
       <div style={{display:"flex", flexDirection:"column", gap:10, marginBottom:16}}>
         {providers.map(p => {
-          const m = counts[p.id]?.[activeMonth] || { weekday:0, friday:0, weekend:0 };
-          return (
+          const m = counts[p.id]?.[activeMonth] || { weekday:0, friday:0, weekend:0 };          return (
             <div key={p.id} style={card({padding:"12px 14px"})}>
               <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}>
                 <Avatar p={p} size={32} ring/>
@@ -2019,6 +2018,26 @@ function HistoryImporter({ providers }) {
           <p style={{margin:0, fontFamily:ffb, fontSize:12, color: msg.ok ? C.teal : C.coral}}>{msg.text}</p>
         </div>
       )}
+    </div>
+  );
+}
+
+function ScheduleAndHistory({ providers }) {
+  const [view, setView] = useState("edit");
+  return (
+    <div>
+      <div style={{display:"flex", background:"#fff", borderRadius:8, padding:3, marginBottom:14, border:`1px solid ${C.grey}`}}>
+        {[["edit","Edit Schedule"],["history","Call History"]].map(([k,l]) => (
+          <button key={k} onClick={() => setView(k)} style={{
+            flex:1, padding:"8px 4px", borderRadius:6, border:"none",
+            fontFamily:ff, fontWeight:800, fontSize:11, cursor:"pointer",
+            background: view === k ? C.teal : "transparent",
+            color: view === k ? "#fff" : C.sub,
+          }}>{l}</button>
+        ))}
+      </div>
+      {view === "edit"    && <ScheduleEditor providers={providers}/>}
+      {view === "history" && <HistoryImporter providers={providers}/>}
     </div>
   );
 }
@@ -2597,7 +2616,6 @@ export function AdminPage({ onBack }) {
           ["nocall",   `No-Call${pendingNoCall > 0 ? ` (${pendingNoCall})` : ""}`],
           ["users",    "Users"],
           ["schedule", "Schedule"],
-          ["history",  "History"],
         ].map(([k, l]) => (
           <button key={k} onClick={() => setTab(k)} style={{
             flex: 1, padding: "9px 2px", borderRadius: 6, border: "none",
@@ -2795,8 +2813,7 @@ export function AdminPage({ onBack }) {
         ))}
       </>}
 
-      {tab === "schedule" && <ScheduleEditor providers={providers}/>}
-      {tab === "history" && <HistoryImporter providers={providers}/>}
+      {tab === "schedule" && <ScheduleAndHistory providers={providers}/>}
 
     </div>
   );
