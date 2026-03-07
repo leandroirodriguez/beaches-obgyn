@@ -174,12 +174,12 @@ function AppInner() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setAuthLoading(false);
-      if (session?.user?.email) fetchCurrentProvider(session.user.email).then(setCurrentProvider);
+      if (session?.user?.email) fetchCurrentProvider(session.user.email).then(p => { setCurrentProvider(p); if (p?.id) registerPush(p.id); });
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session?.user?.email) fetchCurrentProvider(session.user.email).then(setCurrentProvider);
+      if (session?.user?.email) fetchCurrentProvider(session.user.email).then(p => { setCurrentProvider(p); if (p?.id) registerPush(p.id); });
       else setCurrentProvider(null);
     });
 
