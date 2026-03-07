@@ -1121,17 +1121,27 @@ export function PrintSchedulePage({ onBack }) {
       </div>`;
     }).join("");
 
-    const printHtml = `<style>* { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:-apple-system,Helvetica,sans-serif; } body { background:#fff; } @page { margin:0.3in; }</style>${pagesHtml}`;
+    const printHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"/><style>* { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:-apple-system,Helvetica,sans-serif; } body { background:#fff; } @page { margin:0.3in; }</style></head><body>${pagesHtml}</body></html>`;
 
-    // Swap body, wait for repaint, then print
-    const originalBody = document.body.innerHTML;
-    document.body.innerHTML = printHtml;
-
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      window.print();
-      document.body.innerHTML = originalBody;
-      window.location.reload();
-    }));
+    // Use window.open - works on desktop; falls back to body swap on iOS PWA
+    const newWin = window.open("", "_blank");
+    if (newWin) {
+      newWin.document.open();
+      newWin.document.write(printHtml);
+      newWin.document.close();
+      setTimeout(() => { newWin.print(); }, 800);
+    } else {
+      // iOS PWA blocks window.open - swap body instead
+      const originalBody = document.body.innerHTML;
+      document.body.innerHTML = printHtml;
+      setTimeout(() => {
+        window.print();
+        setTimeout(() => {
+          document.body.innerHTML = originalBody;
+          window.location.reload();
+        }, 500);
+      }, 800);
+    }
   };
 
   return (
