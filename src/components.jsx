@@ -1004,9 +1004,9 @@ export function PrintSchedulePage({ onBack }) {
   const [selectedMonths, setSelectedMonths] = useState([
     { year: today.getFullYear(), month: today.getMonth() }
   ]);
-  const [schedules, setSchedules] = useState({});
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [printContent, setPrintContent] = useState(null); // HTML string when ready to print
   const [logoDataUrl, setLogoDataUrl] = useState(null);
 
   const monthOptions = [];
@@ -1039,11 +1039,39 @@ export function PrintSchedulePage({ onBack }) {
 
   useEffect(() => { fetchProviders().then(setProviders); }, []);
 
+  // When printContent is set, inject print styles, print, then clean up
+  useEffect(() => {
+    if (!printContent) return;
+
+    // Inject print styles that hide everything except our overlay
+    const style = document.createElement("style");
+    style.id = "beaches-print-style";
+    style.textContent = `
+      @media print {
+        body > * { display: none !important; }
+        #beaches-print-overlay { display: block !important; position: static !important; }
+        #beaches-print-overlay > .print-ui { display: none !important; }
+        #beaches-print-overlay > .print-pages { display: block !important; }
+        @page { margin: 0.2in; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => {
+        document.getElementById("beaches-print-style")?.remove();
+        setPrintContent(null);
+      }, 500);
+    }, 400);
+
+    return () => { document.getElementById("beaches-print-style")?.remove(); };
+  }, [printContent]);
+
   const handlePrint = async () => {
     if (selectedMonths.length === 0) return;
     setLoading(true);
 
-    // Fetch schedule data
     const results = await Promise.all(
       selectedMonths.map(({ year, month }) =>
         fetchSchedule(year, month).then(data => ({ year, month, data }))
@@ -1052,7 +1080,7 @@ export function PrintSchedulePage({ onBack }) {
     const merged = {};
     results.forEach(({ year, month, data }) => { merged[`${year}-${month}`] = data; });
 
-    // Preload all avatar images as base64
+    // Preload avatars as base64
     const toBase64 = (url) => new Promise((resolve) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
@@ -1075,7 +1103,6 @@ export function PrintSchedulePage({ onBack }) {
 
     setLoading(false);
 
-    // Build HTML pages
     const pagesHtml = selectedMonths.map(({ year, month }) => {
       const scheduleData = merged[`${year}-${month}`];
       const monthName = MONTHS[month];
@@ -1121,15 +1148,20 @@ export function PrintSchedulePage({ onBack }) {
       </div>`;
     }).join("");
 
-    // Store HTML and navigate to print page
-    try {
-      sessionStorage.setItem("printHtml", pagesHtml);
-    } catch(e) {
-      // sessionStorage full - try localStorage
-      try { localStorage.setItem("printHtml", pagesHtml); } catch(e2) { alert("Print data too large. Try selecting fewer months."); return; }
-    }
-    window.location.href = "/?print=1";
+    setPrintContent(pagesHtml);
   };
+
+  // Fullscreen print overlay — visible only during printing via @media print
+  if (printContent) {
+    return (
+      <div id="beaches-print-overlay" style={{position:"fixed", inset:0, zIndex:9999, background:"#fff"}}>
+        <div className="print-ui" style={{display:"flex", alignItems:"center", justifyContent:"center", height:"100vh"}}>
+          <p style={{fontFamily:ff, fontSize:14, color:C.sub}}>Opening print dialog…</p>
+        </div>
+        <div className="print-pages" style={{display:"none"}} dangerouslySetInnerHTML={{__html: printContent}}/>
+      </div>
+    );
+  }
 
   return (
     <div style={{paddingBottom:20}}>
