@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import logoSrc from "./assets/logo.png";
 import { C, ff, ffb, btnS, card, inpS, lblS } from "./data";
 import { supabase } from "./supabase";
@@ -18,6 +18,7 @@ import {
   UpcomingVacationsPage,
   CallLogicPage,
   PrintSchedulePage,
+  PrintRenderer,
 } from "./components";
 
 const NAV = [
@@ -49,43 +50,55 @@ function LoginPage() {
         </div>
         <p style={{fontFamily:ff, fontWeight:900, fontSize:24, color:C.text, marginBottom:6, textAlign:"center"}}>Welcome back</p>
         <p style={{fontFamily:ffb, fontSize:13, color:C.sub, marginBottom:32, textAlign:"center"}}>Sign in to your Beaches OBGYN account</p>
-        <div style={card({padding:"24px"})}>
-          <div style={{marginBottom:16}}>
-            <span style={lblS}>Email</span>
-            <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="your@beachesobgyn.com" style={inpS}/>
-          </div>
-          <div style={{marginBottom:20}}>
-            <span style={lblS}>Password</span>
-            <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleLogin()} placeholder="Enter your password" style={inpS}/>
-          </div>
-          {error && <p style={{fontFamily:ffb, fontSize:12, color:"#e05555", marginBottom:12, textAlign:"center"}}>{error}</p>}
-          <button onClick={handleLogin} disabled={loading} style={btnS({opacity:loading?0.7:1})}>{loading ? "Signing in..." : "Sign In"}</button>
+
+        <div style={{marginBottom:16}}>
+          <label style={lblS}>Email</label>
+          <input
+            style={inpS}
+            type="email"
+            placeholder="you@example.com"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
+          />
         </div>
-        <p style={{fontFamily:ffb, fontSize:11, color:C.sub, textAlign:"center", marginTop:20}}>Contact your administrator to reset your password.</p>
+        <div style={{marginBottom:24}}>
+          <label style={lblS}>Password</label>
+          <input
+            style={inpS}
+            type="password"
+            placeholder="••••••••"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && handleLogin()}
+          />
+        </div>
+        {error && <p style={{color:C.coral, fontSize:13, marginBottom:12, fontFamily:ffb}}>{error}</p>}
+        <button
+          style={{...btnS, width:"100%", opacity: loading ? 0.7 : 1}}
+          onClick={handleLogin}
+          disabled={loading}
+        >
+          {loading ? "Signing in…" : "Sign In"}
+        </button>
       </div>
     </div>
   );
 }
 
 function SetPasswordPage({ onDone }) {
-  const [password, setPassword]   = useState("");
-  const [confirm, setConfirm]     = useState("");
-  const [error, setError]         = useState(null);
-  const [loading, setLoading]     = useState(false);
-  const [done, setDone]           = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm]   = useState("");
+  const [error, setError]       = useState(null);
+  const [loading, setLoading]   = useState(false);
 
   const handleSet = async () => {
-    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
     if (password !== confirm) { setError("Passwords do not match."); return; }
     setLoading(true);
-    setError(null);
     const { error } = await supabase.auth.updateUser({ password });
     if (error) { setError(error.message); setLoading(false); return; }
-    setDone(true);
-    setLoading(false);
-    // Clear invite hash from URL and navigate to app
-    window.history.replaceState(null, "", window.location.pathname);
-    setTimeout(() => onDone(), 1500);
+    onDone();
   };
 
   return (
@@ -95,32 +108,24 @@ function SetPasswordPage({ onDone }) {
           <img src={logoSrc} alt="Beaches OBGYN" style={{height:64, objectFit:"contain"}}/>
         </div>
         <p style={{fontFamily:ff, fontWeight:900, fontSize:24, color:C.text, marginBottom:6, textAlign:"center"}}>Set Your Password</p>
-        <p style={{fontFamily:ffb, fontSize:13, color:C.sub, marginBottom:32, textAlign:"center"}}>Choose a password to activate your account</p>
-        <div style={card({padding:"24px"})}>
-          {done ? (
-            <p style={{fontFamily:ff, fontWeight:700, fontSize:14, color:C.teal, textAlign:"center"}}>
-              ✓ Password set! You are now signed in.
-            </p>
-          ) : <>
-            <div style={{marginBottom:16}}>
-              <span style={lblS}>New Password</span>
-              <input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 8 characters" style={inpS}/>
-            </div>
-            <div style={{marginBottom:20}}>
-              <span style={lblS}>Confirm Password</span>
-              <input type="password" value={confirm} onChange={e=>setConfirm(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSet()} placeholder="Repeat password" style={inpS}/>
-            </div>
-            {error && <p style={{fontFamily:ffb, fontSize:12, color:"#e05555", marginBottom:12, textAlign:"center"}}>{error}</p>}
-            <button onClick={handleSet} disabled={loading} style={btnS({opacity:loading?0.7:1})}>
-              {loading ? "Setting password..." : "Set Password & Sign In"}
-            </button>
-          </>}
+        <p style={{fontFamily:ffb, fontSize:13, color:C.sub, marginBottom:32, textAlign:"center"}}>Choose a password to complete your account setup.</p>
+
+        <div style={{marginBottom:16}}>
+          <label style={lblS}>New Password</label>
+          <input style={inpS} type="password" placeholder="At least 6 characters" value={password} onChange={e => setPassword(e.target.value)}/>
         </div>
+        <div style={{marginBottom:24}}>
+          <label style={lblS}>Confirm Password</label>
+          <input style={inpS} type="password" placeholder="Re-enter password" value={confirm} onChange={e => setConfirm(e.target.value)}/>
+        </div>
+        {error && <p style={{color:C.coral, fontSize:13, marginBottom:12, fontFamily:ffb}}>{error}</p>}
+        <button style={{...btnS, width:"100%", opacity: loading ? 0.7 : 1}} onClick={handleSet} disabled={loading}>
+          {loading ? "Saving…" : "Set Password & Continue"}
+        </button>
       </div>
     </div>
   );
 }
-
 
 async function registerPush(providerId) {
   try {
@@ -140,6 +145,11 @@ async function registerPush(providerId) {
 }
 
 export default function App() {
+  // Check for print route first — before any React state
+  if (new URLSearchParams(window.location.search).get("print") === "1") {
+    return <PrintRenderer />;
+  }
+
   const [session, setSession]                 = useState(null);
   const [authLoading, setAuthLoading]         = useState(true);
   const [currentProvider, setCurrentProvider] = useState(null);
@@ -173,6 +183,8 @@ export default function App() {
     else if (action === "my-requests") { setSub(null); setTab("request"); }
     else if (action === "home") { setSub(null); setTab("home"); }
   }, []);
+
+  // Poll for unread notifications every 30 seconds
   useEffect(() => {
     if (!currentProvider) return;
     const refresh = () => fetchNotifications(currentProvider.id).then(notifs => {
@@ -194,20 +206,14 @@ export default function App() {
       setSession(session);
       setAuthLoading(false);
       if (session?.user?.email) {
-        fetchCurrentProvider(session.user.email).then(provider => {
-          setCurrentProvider(provider);
-          if (provider) registerPush(provider.id);
-        });
+        fetchCurrentProvider(session.user.email).then(setCurrentProvider);
       }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session?.user?.email) {
-        fetchCurrentProvider(session.user.email).then(provider => {
-          setCurrentProvider(provider);
-          if (provider) registerPush(provider.id);
-        });
+        fetchCurrentProvider(session.user.email).then(setCurrentProvider);
       } else {
         setCurrentProvider(null);
       }
@@ -223,8 +229,13 @@ export default function App() {
     setIsInvite(false);
   };
 
-  if (authLoading) return null;
-  if (isInvite && session) return <SetPasswordPage onDone={() => setIsInvite(false)}/>;
+  if (authLoading) return (
+    <div style={{minHeight:"100vh", background:C.bg, display:"flex", alignItems:"center", justifyContent:"center"}}>
+      <p style={{fontFamily:ff, color:C.sub, fontSize:14}}>Loading…</p>
+    </div>
+  );
+
+  if (isInvite) return <SetPasswordPage onDone={() => { setIsInvite(false); registerPush(currentProvider?.id); }} />;
   if (!session) return <LoginPage/>;
 
   const onMessage = p => { setMsgRecip(p); setSub("messages"); };
@@ -243,13 +254,8 @@ export default function App() {
     if (sub === "logic")         return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (sub === "print")         return <PrintSchedulePage onBack={()=>setSub(null)}/>;
     if (sub === "settings")      return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider}/>;
-    if (sub === "notifications") return <NotificationsPage onBack={()=>setSub(null)} currentProvider={currentProvider} onNavigate={(action) => {
-      if (action === "admin-requests") setSub("admin");
-      else if (action === "my-requests") { setSub(null); setTab("request"); }
-      else if (action === "messages") { setSub(null); setTab("providers"); }
-      else if (action === "home") { setSub(null); setTab("home"); }
-    }}/>;
-    if (tab === "home")      return <HomePage/>;
+    if (sub === "notifications") return <NotificationsPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (tab === "home")      return <HomePage currentProvider={currentProvider}/>;
     if (tab === "providers") return <ProvidersPage onMessage={onMessage} currentProvider={currentProvider}/>;
     if (tab === "request")   return <RequestPage currentProvider={currentProvider}/>;
     if (tab === "more")      return <MorePage onNav={k=>setSub(k)} currentProvider={currentProvider}/>;
@@ -258,21 +264,35 @@ export default function App() {
   return (
     <div id="app-root" style={{minHeight:"100vh", background:C.bg, display:"flex", flexDirection:"column", maxWidth:430, margin:"0 auto", fontFamily:ff}}>
       <Header logoSrc={logoSrc} onNotif={handleBell} onSettings={()=>setSub("settings")} unreadCount={unreadCount}/>
-      <div style={{flex:1, overflowY:"auto", padding:"14px 14px 80px"}}>
+      <div style={{flex:1, padding:"16px 16px 0", overflowY:"auto"}}>
         {renderBody()}
       </div>
-      <div style={{position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:430, height:60, background:"#FFF", display:"flex", alignItems:"center", borderTop:`1px solid ${C.grey}`, paddingBottom:"env(safe-area-inset-bottom)", zIndex:50}}>
-          {NAV.map(([key,label,Icon]) => {
-            const active = tab===key;
-            const color  = active ? C.teal : C.greyMid;
+      {!sub && (
+        <nav style={{
+          display:"flex", borderTop:`1px solid ${C.grey}`, background:"#fff",
+          position:"sticky", bottom:0, zIndex:10,
+        }}>
+          {NAV.map(([key, label, Icon]) => {
+            const active = tab === key;
             return (
-              <button key={key} onClick={()=>{ setTab(key); setSub(null); }} style={{flex:1, background:"none", border:"none", cursor:"pointer", display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"6px 0"}}>
-                <Icon color={color}/>
-                <span style={{fontFamily:ff, fontWeight:active?800:500, fontSize:10, color}}>{label}</span>
+              <button
+                key={key}
+                onClick={() => { setTab(key); setSub(null); }}
+                style={{
+                  flex:1, border:"none", background:"none", padding:"10px 0 8px",
+                  display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+                  cursor:"pointer",
+                }}
+              >
+                <Icon color={active ? C.teal : C.sub}/>
+                <span style={{fontFamily:ffb, fontSize:10, color: active ? C.teal : C.sub, fontWeight: active ? 800 : 500}}>
+                  {label}
+                </span>
               </button>
             );
           })}
-        </div>
+        </nav>
+      )}
     </div>
   );
 }

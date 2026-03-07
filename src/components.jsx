@@ -1075,7 +1075,7 @@ export function PrintSchedulePage({ onBack }) {
 
     setLoading(false);
 
-    // Build HTML
+    // Build HTML pages
     const pagesHtml = selectedMonths.map(({ year, month }) => {
       const scheduleData = merged[`${year}-${month}`];
       const monthName = MONTHS[month];
@@ -1121,29 +1121,10 @@ export function PrintSchedulePage({ onBack }) {
       </div>`;
     }).join("");
 
-    const printHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"/><style>* { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:-apple-system,Helvetica,sans-serif; } html, body { width:100%; height:100%; background:#fff; } @page { margin:0.2in; }</style></head><body>${pagesHtml}</body></html>`;
-
-    const isIOSPWA = window.navigator.standalone === true;
-
-    if (isIOSPWA) {
-      // iOS PWA: swap body, wait, print, then reload to restore app
-      const originalBody = document.body.innerHTML;
-      document.body.innerHTML = printHtml;
-      setTimeout(() => {
-        window.print();
-        // Reload after print dialog is dismissed to restore the app
-        setTimeout(() => window.location.reload(), 500);
-      }, 800);
-    } else {
-      // Desktop/browser: open new tab
-      const newWin = window.open("", "_blank");
-      if (newWin) {
-        newWin.document.open();
-        newWin.document.write(printHtml);
-        newWin.document.close();
-        setTimeout(() => { newWin.print(); }, 800);
-      }
-    }
+    // Store HTML in sessionStorage and navigate to print page
+    // This is the only reliable way to print on iOS PWA
+    sessionStorage.setItem("printHtml", pagesHtml);
+    window.location.href = "/?print=1";
   };
 
   return (
@@ -2830,4 +2811,24 @@ export function FairnessPage({ onBack }) {
       }
     </div>
   );
+}
+
+// Renders calendar-only page from sessionStorage, auto-prints, then redirects back
+export function PrintRenderer() {
+  useEffect(() => {
+    const html = sessionStorage.getItem("printHtml");
+    if (!html) { window.location.href = "/"; return; }
+    sessionStorage.removeItem("printHtml");
+
+    // Replace body with just the print content
+    document.head.innerHTML = `<meta charset="utf-8"><meta name="viewport" content="width=device-width"/><style>*{margin:0;padding:0;box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact;font-family:-apple-system,Helvetica,sans-serif;}body{background:#fff;}@page{margin:0.2in;}</style>`;
+    document.body.innerHTML = html;
+
+    setTimeout(() => {
+      window.print();
+      setTimeout(() => { window.location.href = "/"; }, 500);
+    }, 600);
+  }, []);
+
+  return null;
 }
