@@ -1113,34 +1113,36 @@ export function PrintSchedulePage({ onBack }) {
         ? `<img src="${logoDataUrl}" style="height:32px;object-fit:contain;"/>`
         : `<span style="font-weight:900;font-size:15px;color:#1a8c78;">Beaches OBGYN</span>`;
 
-      return `<div style="width:100%;box-sizing:border-box;background:#fff;page-break-after:always;display:flex;flex-direction:column;padding:12px 14px;min-height:100vh;">
+      return `<div style="width:100%;height:99vh;box-sizing:border-box;background:#fff;page-break-after:always;page-break-inside:avoid;display:flex;flex-direction:column;padding:12px 14px;overflow:hidden;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:2px solid #1a8c78;padding-bottom:6px;flex-shrink:0;">${logoHtml}<div style="text-align:right;"><div style="font-size:17px;font-weight:900;color:#1a3a35;">${monthName} ${year}</div><div style="font-size:8px;color:#888;">Call Schedule</div></div></div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:2px;flex-shrink:0;">${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>`<div style="text-align:center;padding:2px 0;font-size:8px;font-weight:900;color:${i===0||i===6?"#e05c5c":"#1a8c78"};background:#f0faf8;border-radius:3px;">${d}</div>`).join("")}</div>
-        <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},1fr);gap:2px;flex:1;">${cellsHtml}</div>
+        <div style="display:grid;grid-template-columns:repeat(7,1fr);grid-template-rows:repeat(${numRows},1fr);gap:2px;flex:1;overflow:hidden;">${cellsHtml}</div>
         <div style="margin-top:4px;padding-top:4px;border-top:1px solid #e8e8e8;display:flex;flex-wrap:wrap;gap:2px 10px;flex-shrink:0;">${legendHtml}</div>
       </div>`;
     }).join("");
 
-    const printHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"/><style>* { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:-apple-system,Helvetica,sans-serif; } body { background:#fff; } @page { margin:0.3in; }</style></head><body>${pagesHtml}</body></html>`;
+    const printHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"/><style>* { margin:0; padding:0; box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; font-family:-apple-system,Helvetica,sans-serif; } html, body { width:100%; height:100%; background:#fff; } @page { margin:0.2in; }</style></head><body>${pagesHtml}</body></html>`;
 
-    // Use window.open - works on desktop; falls back to body swap on iOS PWA
-    const newWin = window.open("", "_blank");
-    if (newWin) {
-      newWin.document.open();
-      newWin.document.write(printHtml);
-      newWin.document.close();
-      setTimeout(() => { newWin.print(); }, 800);
-    } else {
-      // iOS PWA blocks window.open - swap body instead
+    const isIOSPWA = window.navigator.standalone === true;
+
+    if (isIOSPWA) {
+      // iOS PWA: swap body, wait, print, then reload to restore app
       const originalBody = document.body.innerHTML;
       document.body.innerHTML = printHtml;
       setTimeout(() => {
         window.print();
-        setTimeout(() => {
-          document.body.innerHTML = originalBody;
-          window.location.reload();
-        }, 500);
+        // Reload after print dialog is dismissed to restore the app
+        setTimeout(() => window.location.reload(), 500);
       }, 800);
+    } else {
+      // Desktop/browser: open new tab
+      const newWin = window.open("", "_blank");
+      if (newWin) {
+        newWin.document.open();
+        newWin.document.write(printHtml);
+        newWin.document.close();
+        setTimeout(() => { newWin.print(); }, 800);
+      }
     }
   };
 
