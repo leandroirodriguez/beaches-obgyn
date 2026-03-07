@@ -1827,74 +1827,61 @@ function AIScheduleGenerator() {
 }
 
 const IMPORT_MONTHS = [
-  { label: "January 2025",  year: 2025, month: 0 },
-  { label: "February 2025", year: 2025, month: 1 },
-  { label: "March 2025",    year: 2025, month: 2 },
-  { label: "April 2025",    year: 2025, month: 3 },
+  { year: 2026, month: 0 },
+  { year: 2026, month: 1 },
+  { year: 2026, month: 2 },
+  { year: 2026, month: 3 },
 ];
 
 function HistoryImporter({ providers }) {
-  // counts[providerId][monthIdx] = { weekday, friday, weekend }
   const initCounts = () => {
     const c = {};
-    providers.forEach(p => {
-      c[p.id] = IMPORT_MONTHS.map(() => ({ weekday: 0, friday: 0, weekend: 0 }));
-    });
+    providers.forEach(p => { c[p.id] = { weekday: 0, friday: 0, weekend: 0 }; });
     return c;
   };
 
-  const [counts, setCounts]   = useState({});
+  const [counts, setCounts]     = useState({});
   const [importing, setImporting] = useState(false);
-  const [msg, setMsg]         = useState(null);
-  const [activeMonth, setActiveMonth] = useState(0);
+  const [msg, setMsg]           = useState(null);
 
   useEffect(() => { if (providers.length) setCounts(initCounts()); }, [providers.length]);
 
-  const setVal = (pid, mIdx, type, val) => {
+  const setVal = (pid, type, val) => {
     const n = Math.max(0, parseInt(val) || 0);
-    setCounts(prev => {
-      const next = { ...prev, [pid]: prev[pid].map((m, i) => i === mIdx ? { ...m, [type]: n } : m) };
-      return next;
-    });
+    setCounts(prev => ({ ...prev, [pid]: { ...prev[pid], [type]: n } }));
   };
 
   const handleImport = async () => {
     setImporting(true);
     setMsg(null);
-
-    // Build list of rows to insert
     const rows = [];
 
-    for (const [mIdx, { year, month }] of IMPORT_MONTHS.entries()) {
-      // Build date pools for this month grouped by day type
-      const pools = { weekday: [], friday: [], weekend: [] };
+    // Build all available date pools across Jan–Apr 2026 grouped by type
+    const pools = { weekday: [], friday: [], weekend: [] };
+    for (const { year, month } of IMPORT_MONTHS) {
       const days = new Date(year, month + 1, 0).getDate();
       for (let d = 1; d <= days; d++) {
-        const dt = new Date(year, month, d);
-        const dow = dt.getDay();
+        const dow = new Date(year, month, d).getDay();
         const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
         if (dow === 6 || dow === 0) pools.weekend.push(dateStr);
         else if (dow === 5) pools.friday.push(dateStr);
         else pools.weekday.push(dateStr);
       }
+    }
 
-      // For each day type, distribute calls round-robin across providers
-      for (const type of ["weekday", "friday", "weekend"]) {
-        // Build ordered list of (provider, count) for this type/month
-        const assignments = [];
+    // For each day type, distribute calls round-robin across providers
+    for (const type of ["weekday", "friday", "weekend"]) {
+      // Build interleaved list: [p1, p2, p3, p1, p2, ...] based on each provider's count
+      const assignments = [];
+      const maxCnt = Math.max(...providers.map(p => counts[p.id]?.[type] || 0));
+      for (let i = 0; i < maxCnt; i++) {
         providers.forEach(p => {
-          const cnt = counts[p.id]?.[mIdx]?.[type] || 0;
-          for (let i = 0; i < cnt; i++) assignments.push(p);
-        });
-
-        // Spread evenly across available dates, avoid same provider back-to-back
-        const pool = [...pools[type]];
-        assignments.forEach((p, i) => {
-          if (i < pool.length) {
-            rows.push({ date: pool[i], provider_id: p.id });
-          }
+          if ((counts[p.id]?.[type] || 0) > i) assignments.push(p);
         });
       }
+      assignments.forEach((p, i) => {
+        if (i < pools[type].length) rows.push({ date: pools[type][i], provider_id: p.id });
+      });
     }
 
     if (rows.length === 0) {
@@ -1903,86 +1890,71 @@ function HistoryImporter({ providers }) {
       return;
     }
 
-    // Check for existing data in this range to avoid duplicates
+    // Check for existing data to avoid duplicates
     const { data: existing } = await supabase
-      .from("call_schedule")
-      .select("date")
-      .gte("date", "2025-01-01")
-      .lte("date", "2025-04-30");
+      .from("call_schedule").select("date")
+      .gte("date", "2026-01-01").lte("date", "2026-04-30");
 
     const existingDates = new Set((existing || []).map(r => r.date));
     const newRows = rows.filter(r => !existingDates.has(r.date));
 
     if (newRows.length === 0) {
-      setMsg({ ok: false, text: "All dates in Jan–Apr 2025 already have schedule data. Clear them first if you want to re-import." });
+      setMsg({ ok: false, text: "Jan–Apr 2026 already has schedule data. Clear it first if you want to re-import." });
       setImporting(false);
       return;
     }
 
     const { error } = await supabase.from("call_schedule").insert(newRows);
-
     if (error) {
       setMsg({ ok: false, text: `Import failed: ${error.message}` });
     } else {
-      setMsg({ ok: true, text: `✓ Imported ${newRows.length} call days into Jan–Apr 2025. The AI scheduler will now account for this history when generating May onward.` });
+      setMsg({ ok: true, text: `✓ Imported ${newRows.length} call days across Jan–Apr 2026. The AI scheduler will now account for this history when generating May onward.` });
     }
     setImporting(false);
   };
 
-  const totalForMonth = (mIdx) => {
-    let t = 0;
-    providers.forEach(p => {
-      const m = counts[p.id]?.[mIdx];
-      if (m) t += (m.weekday || 0) + (m.friday || 0) + (m.weekend || 0);
-    });
-    return t;
-  };
-
-  if (!providers.length || !Object.keys(counts).length) return <div style={{padding:20, textAlign:"center", color:C.sub, fontFamily:ff}}>Loading…</div>;
+  if (!providers.length || !Object.keys(counts).length)
+    return <div style={{padding:20, textAlign:"center", color:C.sub, fontFamily:ff}}>Loading…</div>;
 
   return (
     <div style={{paddingBottom:32}}>
       <div style={{padding:"12px 14px", borderRadius:10, background:`${C.wave}99`, border:`1px solid ${C.teal}44`, marginBottom:16}}>
         <p style={{margin:"0 0 4px", fontFamily:ff, fontWeight:900, fontSize:13, color:C.teal}}>Call History Importer</p>
-        <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.sub}}>Enter each provider's call counts for Jan–Apr 2025. The AI scheduler will use this history to ensure fair distribution when generating May onward.</p>
+        <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.sub}}>Enter each provider's <strong>total</strong> call counts for Jan–Apr 2026 combined. The AI scheduler will use this to fairly distribute calls starting May.</p>
       </div>
 
-      {/* Month tabs */}
-      <div style={{display:"flex", background:"#fff", borderRadius:8, padding:3, marginBottom:14, border:`1px solid ${C.grey}`}}>
-        {IMPORT_MONTHS.map(({label}, i) => (
-          <button key={i} onClick={() => setActiveMonth(i)} style={{
-            flex:1, padding:"8px 2px", borderRadius:6, border:"none",
-            fontFamily:ff, fontWeight:800, fontSize:10, cursor:"pointer",
-            background: activeMonth === i ? C.teal : "transparent",
-            color: activeMonth === i ? "#fff" : C.sub,
-          }}>
-            {label.split(" ")[0]}
-            {totalForMonth(i) > 0 && <span style={{display:"block", fontSize:9, opacity:0.85}}>{totalForMonth(i)} calls</span>}
-          </button>
+      {/* Column headers */}
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8, padding:"0 4px", marginBottom:6}}>
+        <div/>
+        {[["Mon–Thu",C.teal],["Fridays","#8b7cf6"],["Sat–Sun",C.coral]].map(([label, color]) => (
+          <p key={label} style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:10, color, textAlign:"center"}}>{label}</p>
         ))}
       </div>
 
-      {/* Provider rows for active month */}
-      <div style={{display:"flex", flexDirection:"column", gap:10, marginBottom:16}}>
+      {/* One row per provider */}
+      <div style={{display:"flex", flexDirection:"column", gap:8, marginBottom:16}}>
         {providers.map(p => {
-          const m = counts[p.id]?.[activeMonth] || { weekday:0, friday:0, weekend:0 };
+          const c = counts[p.id] || { weekday:0, friday:0, weekend:0 };
+          const total = c.weekday + c.friday + c.weekend;
           return (
-            <div key={p.id} style={card({padding:"12px 14px"})}>
-              <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}>
-                <Avatar p={p} size={32} ring/>
-                <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{p.name}</p>
-              </div>
-              <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8}}>
-                {[["weekday","Mon–Thu",C.teal],["friday","Fridays","#8b7cf6"],["weekend","Sat–Sun",C.coral]].map(([type, label, color]) => (
-                  <div key={type}>
-                    <p style={{margin:"0 0 4px", fontFamily:ff, fontWeight:800, fontSize:10, color}}>{label}</p>
-                    <input
-                      type="number" min={0} value={m[type]}
-                      onChange={e => setVal(p.id, activeMonth, type, e.target.value)}
-                      style={{...inpS, padding:"6px 8px", fontSize:14, textAlign:"center", width:"100%", boxSizing:"border-box",
-                        borderColor: m[type] > 0 ? color : undefined}}
-                    />
+            <div key={p.id} style={card({padding:"10px 12px"})}>
+              <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:8, alignItems:"center"}}>
+                <div style={{display:"flex", alignItems:"center", gap:8}}>
+                  <Avatar p={p} size={28} ring/>
+                  <div>
+                    <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:11, color:C.text, lineHeight:1.2}}>{p.name.replace("Dr. ","")}</p>
+                    {total > 0 && <p style={{margin:0, fontFamily:ffb, fontSize:10, color:C.teal}}>{total} total</p>}
                   </div>
+                </div>
+                {[["weekday",C.teal],["friday","#8b7cf6"],["weekend",C.coral]].map(([type, color]) => (
+                  <input key={type}
+                    type="number" min={0} value={c[type]}
+                    onChange={e => setVal(p.id, type, e.target.value)}
+                    style={{...inpS, padding:"6px 4px", fontSize:15, fontWeight:800,
+                      textAlign:"center", width:"100%", boxSizing:"border-box",
+                      borderColor: c[type] > 0 ? color : undefined,
+                      color: c[type] > 0 ? color : C.sub}}
+                  />
                 ))}
               </div>
             </div>
@@ -1990,32 +1962,15 @@ function HistoryImporter({ providers }) {
         })}
       </div>
 
-      {/* Summary totals */}
-      <div style={card({padding:"12px 14px", marginBottom:16})}>
-        <p style={{margin:"0 0 8px", fontFamily:ff, fontWeight:900, fontSize:12, color:C.text}}>Total calls across all months</p>
-        {providers.map(p => {
-          const total = IMPORT_MONTHS.reduce((sum, _, i) => {
-            const m = counts[p.id]?.[i] || {};
-            return sum + (m.weekday||0) + (m.friday||0) + (m.weekend||0);
-          }, 0);
-          return (
-            <div key={p.id} style={{display:"flex", alignItems:"center", gap:10, marginBottom:6}}>
-              <div style={{width:10, height:10, borderRadius:"50%", background:p.color, flexShrink:0}}/>
-              <p style={{margin:0, fontFamily:ffb, fontSize:12, color:C.text, flex:1}}>{p.name}</p>
-              <p style={{margin:0, fontFamily:ff, fontWeight:900, fontSize:13, color: total>0?C.teal:C.sub}}>{total} calls</p>
-            </div>
-          );
-        })}
-      </div>
-
-      <button onClick={handleImport} disabled={importing} style={btnS({width:"100%", padding:"12px", fontSize:14, opacity: importing ? 0.6 : 1})}>
+      <button onClick={handleImport} disabled={importing}
+        style={btnS({width:"100%", padding:"12px", fontSize:14, opacity: importing ? 0.6 : 1})}>
         {importing ? "Importing…" : "Import History into Scheduler"}
       </button>
 
       {msg && (
         <div style={{marginTop:12, padding:"12px 14px", borderRadius:8,
           background: msg.ok ? `${C.wave}99` : "#fff0f0",
-          border: `1px solid ${msg.ok ? C.teal : C.coral}`}}>
+          border:`1px solid ${msg.ok ? C.teal : C.coral}`}}>
           <p style={{margin:0, fontFamily:ffb, fontSize:12, color: msg.ok ? C.teal : C.coral}}>{msg.text}</p>
         </div>
       )}
