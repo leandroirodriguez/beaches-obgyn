@@ -203,6 +203,71 @@ export function NextStrip({ schedule={}, year, month }) {
   );
 }
 
+function VacationStrip() {
+  const [vacationing, setVacationing] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchRequests().then(all => {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const active = all.filter(r => {
+        if (r.status !== "Approved") return false;
+        const s = new Date(r.start_date + "T00:00:00");
+        const e = new Date(r.end_date + "T00:00:00");
+        return s <= today && e >= today;
+      });
+      // Dedupe by provider
+      const seen = new Set();
+      const unique = active.filter(r => {
+        if (!r.providers?.id || seen.has(r.providers.id)) return false;
+        seen.add(r.providers.id); return true;
+      });
+      setVacationing(unique);
+      setLoading(false);
+    });
+  }, []);
+
+  // Flat "nobody out" icon — consistent with Avatar style
+  const NobodyIcon = () => (
+    <div style={{width:40, height:40, borderRadius:"50%", background:`${C.wave}cc`, border:`2px dashed ${C.teal}55`, display:"flex", alignItems:"center", justifyContent:"center"}}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="8" r="4" fill={C.teal} opacity="0.4"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke={C.teal} strokeWidth="2" strokeLinecap="round" opacity="0.4"/>
+        <line x1="4" y1="4" x2="20" y2="20" stroke={C.teal} strokeWidth="1.5" strokeLinecap="round" opacity="0.5"/>
+      </svg>
+    </div>
+  );
+
+  return (
+    <div style={card({padding:"12px 14px", background:`linear-gradient(135deg,#fff8f0,#FFF)`, border:`1px solid #ffe4cc`, marginTop:12})}>
+      <p style={{margin:"0 0 10px", fontFamily:ff, fontWeight:800, fontSize:10, color:"#e07030", letterSpacing:1.2, textTransform:"uppercase"}}>
+        Currently on Vacation
+      </p>
+      {loading ? (
+        <div style={{height:50, display:"flex", alignItems:"center", justifyContent:"center"}}>
+          <div style={{width:34, height:34, borderRadius:"50%", background:C.grey, opacity:0.4}}/>
+        </div>
+      ) : vacationing.length === 0 ? (
+        <div style={{display:"flex", alignItems:"center", gap:12}}>
+          <NobodyIcon/>
+          <span style={{fontFamily:ffb, fontSize:12, color:C.sub}}>No one is currently on vacation</span>
+        </div>
+      ) : (
+        <div style={{display:"flex", flexWrap:"wrap", gap:12}}>
+          {vacationing.map(r => (
+            <div key={r.id} style={{display:"flex", flexDirection:"column", alignItems:"center", gap:5}}>
+              <Avatar p={r.providers} size={40} ring/>
+              <span style={{fontFamily:ff, fontWeight:700, fontSize:10, color:C.sub, maxWidth:50, textAlign:"center", lineHeight:1.2}}>
+                {r.providers.name.replace("Dr. ","")}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function HomePage() {
   const [yr,setYr]             = useState(new Date().getFullYear());
   const [mo,setMo]             = useState(new Date().getMonth());
@@ -277,7 +342,7 @@ export function HomePage() {
         )}
       </div>
       <NextStrip schedule={schedule} year={yr} month={mo}/>
-      <button style={btnS({marginTop:14})}>Sync to Calendar</button>
+      <VacationStrip/>
     </div>
   );
 }
