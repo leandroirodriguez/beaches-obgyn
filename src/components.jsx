@@ -59,11 +59,21 @@ export function IcoGear({color}) {
     </svg>
   );
 }
-export function IcoLock({color}) {
+export function IcoLock({color, size=22}) {
   return (
-    <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <rect x={5} y={11} width={14} height={10} rx={2} stroke={color} strokeWidth={2}/>
       <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke={color} strokeWidth={2} strokeLinecap="round"/>
+      <circle cx={12} cy={16} r={1.5} fill={color}/>
+    </svg>
+  );
+}
+export function IcoUnlock({color, size=22}) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x={5} y={11} width={14} height={10} rx={2} stroke={color} strokeWidth={2}/>
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeDasharray="2 0" opacity={0.35}/>
+      <path d="M16 7V5a4 4 0 0 0-8 0" stroke={color} strokeWidth={2} strokeLinecap="round"/>
       <circle cx={12} cy={16} r={1.5} fill={color}/>
     </svg>
   );
@@ -1721,7 +1731,7 @@ function AIScheduleGenerator() {
                   const locked   = isMonthLocked(year, i);
                   return (
                     <option key={i} value={i} disabled={blocked || locked}>
-                      {m}{locked ? " 🔒 locked" : blocked ? " ⚠ incomplete prior months" : ""}
+                      {m}{locked ? " · locked" : blocked ? " ⚠ incomplete prior months" : ""}
                     </option>
                   );
                 })}
@@ -1759,13 +1769,16 @@ function AIScheduleGenerator() {
 
             {/* Locked warning */}
             {!bulk && isMonthLocked(year, month) && (
-              <div style={{padding:"10px 12px", borderRadius:8, marginBottom:12, background:"#f0f9ff", border:"1px solid #0ea5e9"}}>
-                <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:12, color:"#0369a1"}}>
-                  🔒 {MONTHS[month]} {year} is locked
-                </p>
-                <p style={{margin:"4px 0 0", fontFamily:ffb, fontSize:11, color:"#0369a1"}}>
-                  This month is locked to prevent accidental re-generation. Unlock it in Admin Panel → Schedule → Edit Schedule.
-                </p>
+              <div style={{padding:"10px 12px", borderRadius:8, marginBottom:12, background:"#f0f9ff", border:"1px solid #0ea5e9", display:"flex", alignItems:"flex-start", gap:8}}>
+                <IcoLock color="#0369a1" size={16}/>
+                <div>
+                  <p style={{margin:"0 0 2px", fontFamily:ff, fontWeight:800, fontSize:12, color:"#0369a1"}}>
+                    {MONTHS[month]} {year} is locked
+                  </p>
+                  <p style={{margin:0, fontFamily:ffb, fontSize:11, color:"#0369a1"}}>
+                    Unlock it in Admin Panel → Schedule → Edit Schedule to allow re-generation.
+                  </p>
+                </div>
               </div>
             )}
 
@@ -2216,7 +2229,10 @@ function ScheduleEditor({ providers }) {
           opacity: lockSaving ? 0.6 : 1,
           display:"flex", alignItems:"center", justifyContent:"center", gap:6,
         }}>
-        {lockSaving ? "Saving…" : isLocked ? "🔒 Locked — Tap to Unlock" : "🔓 Unlocked — Tap to Lock"}
+        {isLocked
+          ? <><IcoLock color="#0369a1" size={15}/> Locked — Tap to Unlock</>
+          : <><IcoUnlock color={C.greyMid} size={15}/> Unlocked — Tap to Lock</>
+        }
       </button>
 
       <div style={card({padding:"12px"})}>
