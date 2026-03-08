@@ -250,10 +250,10 @@ export async function updateProviderPrefs(providerId, prefs) {
   return !error;
 }
 
-export async function updateProviderProfile(providerId, { full_name, phone, display_name }) {
+export async function updateProviderProfile(providerId, { full_name, phone, display_name, fl_license_exp, dea_license_exp }) {
   const { error } = await supabase
     .from("providers")
-    .update({ full_name, phone, display_name })
+    .update({ full_name, phone, display_name, fl_license_exp: fl_license_exp || null, dea_license_exp: dea_license_exp || null })
     .eq("id", providerId);
   if (error) console.error("updateProviderProfile:", error);
   if (error) throw error;

@@ -1115,6 +1115,17 @@ export function IcoPrint({color}) {
     </svg>
   );
 }
+export function IcoLicense({color}) {
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <rect x={3} y={4} width={18} height={16} rx={2} stroke={color} strokeWidth={2}/>
+      <circle cx={9} cy={10} r={2} stroke={color} strokeWidth={1.5}/>
+      <path d="M5 18c0-2.2 1.8-4 4-4" stroke={color} strokeWidth={1.5} strokeLinecap="round"/>
+      <line x1={13} y1={9} x2={19} y2={9} stroke={color} strokeWidth={1.5} strokeLinecap="round"/>
+      <line x1={13} y1={13} x2={17} y2={13} stroke={color} strokeWidth={1.5} strokeLinecap="round"/>
+    </svg>
+  );
+}
 
 export function PrintSchedulePage({ onBack }) {
   const today = new Date();
@@ -1434,6 +1445,124 @@ export function PrintSchedulePage({ onBack }) {
   );
 }
 
+export function LicensesPage({ onBack, currentProvider }) {
+  const [providers, setProviders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    fetchProviders().then(all => {
+      setProviders(all.filter(p => !p.is_read_only));
+      setLoading(false);
+    });
+  }, []);
+
+  const fmt = d => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" }) : "—";
+
+  const getDaysUntil = d => {
+    if (!d) return null;
+    const diff = Math.ceil((new Date(d + "T00:00:00") - new Date()) / (1000*60*60*24));
+    return diff;
+  };
+
+  const statusColor = (d) => {
+    if (!d) return { bg: "#f7f7f7", border: C.grey, text: C.sub, label: "Not entered" };
+    const days = getDaysUntil(d);
+    if (days < 0)   return { bg: "#fff0f0", border: C.coral, text: C.coral, label: "Expired" };
+    if (days <= 30) return { bg: "#fff8e6", border: "#f59e0b", text: "#b45309", label: `Expires in ${days}d` };
+    if (days <= 90) return { bg: "#fffbeb", border: "#fcd34d", text: "#92400e", label: `${days}d left` };
+    return { bg: C.wave, border: `${C.teal}44`, text: C.teal, label: `${days}d left` };
+  };
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const { jsPDF } = await import("https://cdn.jsdelivr.net/npm/jspdf@2.5.1/+esm");
+      const pdf = new jsPDF({ orientation:"portrait", unit:"pt", format:"letter" });
+      const pageW = 612, margin = 36, contentW = pageW - margin*2;
+      let y = margin;
+
+      pdf.setFillColor(42,157,143); pdf.rect(0,0,pageW,44,"F");
+      pdf.setFont("helvetica","bold"); pdf.setFontSize(16); pdf.setTextColor(255,255,255);
+      pdf.text("Beaches OBGYN", margin, 28);
+      pdf.setFont("helvetica","normal"); pdf.setFontSize(10);
+      pdf.text("License Expiration Report  ·  " + new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}), margin, 42);
+      y = 68;
+
+      providers.forEach(p => {
+        if (y > 680) { pdf.addPage(); y = margin; }
+        pdf.setFillColor(232,245,243); pdf.roundedRect(margin, y, contentW, 64, 4, 4, "F");
+        pdf.setFont("helvetica","bold"); pdf.setFontSize(12); pdf.setTextColor(26,46,43);
+        pdf.text(p.name, margin+10, y+18);
+        pdf.setFont("helvetica","normal"); pdf.setFontSize(9); pdf.setTextColor(107,143,138);
+        pdf.text(p.credentials || "", margin+10, y+30);
+
+        const flDays = getDaysUntil(p.fl_license_exp);
+        const deaDays = getDaysUntil(p.dea_license_exp);
+
+        pdf.setFontSize(9); pdf.setTextColor(26,46,43);
+        pdf.setFont("helvetica","bold"); pdf.text("FL Medical License:", margin+10, y+46);
+        pdf.setFont("helvetica","normal");
+        const flText = p.fl_license_exp ? fmt(p.fl_license_exp) + (flDays !== null ? `  (${flDays < 0 ? "EXPIRED" : flDays+"d left"})` : "") : "Not entered";
+        pdf.setTextColor(flDays !== null && flDays <= 30 ? 180 : 42, flDays !== null && flDays <= 30 ? 69 : 157, flDays !== null && flDays <= 30 ? 54 : 143);
+        pdf.text(flText, margin+110, y+46);
+
+        pdf.setFont("helvetica","bold"); pdf.setTextColor(26,46,43); pdf.text("DEA License:", margin+10, y+58);
+        pdf.setFont("helvetica","normal");
+        const deaText = p.dea_license_exp ? fmt(p.dea_license_exp) + (deaDays !== null ? `  (${deaDays < 0 ? "EXPIRED" : deaDays+"d left"})` : "") : "Not entered";
+        pdf.setTextColor(deaDays !== null && deaDays <= 30 ? 180 : 42, deaDays !== null && deaDays <= 30 ? 69 : 157, deaDays !== null && deaDays <= 30 ? 54 : 143);
+        pdf.text(deaText, margin+110, y+58);
+        y += 74;
+      });
+
+      pdf.save(`Beaches_OBGYN_Licenses_${new Date().toISOString().slice(0,10)}.pdf`);
+    } catch(e) { console.error(e); }
+    setExporting(false);
+  };
+
+  return (
+    <div style={{paddingBottom:20}}>
+      <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:16}}>
+        <button onClick={onBack} style={{background:"none", border:"none", fontSize:22, cursor:"pointer", color:C.primary}}>‹</button>
+        <span style={{fontFamily:ff, fontWeight:900, fontSize:16, color:C.text, flex:1}}>License Expirations</span>
+        <button onClick={handleExport} disabled={exporting} style={oBtnS({padding:"7px 12px", fontSize:11})}>
+          {exporting ? "Exporting…" : "Export PDF"}
+        </button>
+      </div>
+
+      {loading
+        ? <p style={{fontFamily:ffb, fontSize:13, color:C.sub, textAlign:"center", padding:20}}>Loading…</p>
+        : providers.map(p => {
+          const flS = statusColor(p.fl_license_exp);
+          const deaS = statusColor(p.dea_license_exp);
+          const isMe = p.id === currentProvider?.id;
+          return (
+            <div key={p.id} style={card({padding:"13px 14px", marginBottom:10, border: isMe ? `2px solid ${C.teal}` : undefined})}>
+              <div style={{display:"flex", alignItems:"center", gap:10, marginBottom:10}}>
+                <Avatar p={p} size={36} ring/>
+                <div>
+                  <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{p.name}</p>
+                  <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{p.credentials}</p>
+                </div>
+                {isMe && <span style={{marginLeft:"auto", fontFamily:ff, fontWeight:700, fontSize:9, color:"#fff", background:C.teal, borderRadius:4, padding:"2px 6px"}}>YOU</span>}
+              </div>
+              <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+                {[["FL Medical License", p.fl_license_exp, flS], ["DEA License", p.dea_license_exp, deaS]].map(([label, exp, s]) => (
+                  <div key={label} style={{padding:"8px 10px", borderRadius:8, background:s.bg, border:`1px solid ${s.border}`}}>
+                    <p style={{margin:"0 0 2px", fontFamily:ff, fontWeight:700, fontSize:10, color:C.sub, textTransform:"uppercase", letterSpacing:0.8}}>{label}</p>
+                    <p style={{margin:"0 0 2px", fontFamily:ff, fontWeight:800, fontSize:12, color:C.text}}>{fmt(exp)}</p>
+                    <p style={{margin:0, fontFamily:ffb, fontSize:10, color:s.text}}>{s.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })
+      }
+    </div>
+  );
+}
+
 export function MorePage({ onNav, currentProvider }) {
   const isAdmin = currentProvider?.is_admin;
   const isReadOnly = currentProvider?.is_read_only;
@@ -1442,6 +1571,7 @@ export function MorePage({ onNav, currentProvider }) {
     [IcoClipboard,"Call Logic","logic"],
     [IcoPalm,"Upcoming Vacations","vacations"],
     [IcoScale,"Call Fairness","fairness"],
+    [IcoLicense,"License Expirations","licenses"],
     [IcoPrint,"Export Schedule PDF","print"],
     [IcoGear,"Settings","settings"],
   ].filter(([,,key]) => {
@@ -3059,6 +3189,8 @@ export function SettingsPage({ onBack, onLogout, currentProvider, onProfileSaved
   const [fullName, setFullName]       = useState("");
   const [phone, setPhone]             = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [flLicenseExp, setFlLicenseExp] = useState("");
+  const [deaLicenseExp, setDeaLicenseExp] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileMsg, setProfileMsg]   = useState(null);
 
@@ -3070,6 +3202,8 @@ export function SettingsPage({ onBack, onLogout, currentProvider, onProfileSaved
       setFullName(currentProvider.full_name || "");
       setPhone(currentProvider.phone || "");
       setDisplayName(currentProvider.display_name || "");
+      setFlLicenseExp(currentProvider.fl_license_exp || "");
+      setDeaLicenseExp(currentProvider.dea_license_exp || "");
     }
   }, [currentProvider]);
 
@@ -3077,7 +3211,7 @@ export function SettingsPage({ onBack, onLogout, currentProvider, onProfileSaved
     if (!currentProvider) return;
     setProfileSaving(true); setProfileMsg(null);
     try {
-      await updateProviderProfile(currentProvider.id, { full_name: fullName, phone, display_name: displayName });
+      await updateProviderProfile(currentProvider.id, { full_name: fullName, phone, display_name: displayName, fl_license_exp: flLicenseExp, dea_license_exp: deaLicenseExp });
       if (onProfileSaved) onProfileSaved();
       setProfileMsg({ ok: true, text: "Profile saved!" });
       setTimeout(() => setProfileMsg(null), 2500);
@@ -3146,6 +3280,17 @@ export function SettingsPage({ onBack, onLogout, currentProvider, onProfileSaved
             <input style={inpS} type={type} placeholder={placeholder} value={val} onChange={e => setter(e.target.value)}/>
           </div>
         ))}
+        <div style={{borderTop:`1px solid ${C.grey}`, paddingTop:12, marginTop:4, marginBottom:10}}>
+          <p style={{margin:"0 0 10px", fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>License Expiration Dates</p>
+          <div style={{marginBottom:10}}>
+            <span style={lblS}>Florida Medical License Expiration</span>
+            <input style={inpS} type="date" value={flLicenseExp} onChange={e => setFlLicenseExp(e.target.value)}/>
+          </div>
+          <div style={{marginBottom:4}}>
+            <span style={lblS}>DEA License Expiration</span>
+            <input style={inpS} type="date" value={deaLicenseExp} onChange={e => setDeaLicenseExp(e.target.value)}/>
+          </div>
+        </div>
         {profileMsg && <p style={{margin:"0 0 8px", fontFamily:ffb, fontSize:12, color: profileMsg.ok ? C.teal : C.coral}}>{profileMsg.text}</p>}
         <button onClick={handleSaveProfile} disabled={profileSaving} style={btnS({width:"100%", padding:"10px", opacity: profileSaving ? 0.6 : 1})}>
           {profileSaving ? "Saving…" : "Save Profile"}

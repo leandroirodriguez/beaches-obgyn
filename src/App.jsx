@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import logoSrc from "./assets/logo.png";
 import { C, ff, ffb, btnS, card, inpS, lblS } from "./data";
 import { supabase } from "./supabase";
-import { fetchCurrentProvider, registerPushSubscription, fetchNotifications, markNotificationsRead } from "./api";
+import { fetchCurrentProvider, registerPushSubscription, fetchNotifications, markNotificationsRead, sendPushNotification } from "./api";
 import {
   IcoHome, IcoProviders, IcoRequest, IcoMore,
   Header,
@@ -18,6 +18,7 @@ import {
   UpcomingVacationsPage,
   CallLogicPage,
   PrintSchedulePage,
+  LicensesPage,
 } from "./components";
 
 const NAV = [
@@ -175,6 +176,26 @@ function AppInner() {
     return () => clearInterval(interval);
   }, [currentProvider]);
 
+  // Check license expiry on login — notify if within 30 days
+  useEffect(() => {
+    if (!currentProvider) return;
+    const check = (dateStr, label) => {
+      if (!dateStr) return;
+      const days = Math.ceil((new Date(dateStr + "T00:00:00") - new Date()) / (1000*60*60*24));
+      if (days >= 0 && days <= 30) {
+        sendPushNotification({
+          providerIds: [currentProvider.id],
+          title: `${label} Expiring Soon ⚠️`,
+          body: `Your ${label} expires in ${days} day${days === 1 ? "" : "s"} on ${new Date(dateStr + "T00:00:00").toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}.`,
+          data: { action: "home" },
+          notifKey: `license_exp_${label.replace(/\s/g,"_")}_${dateStr}`,
+        });
+      }
+    };
+    check(currentProvider.fl_license_exp, "FL Medical License");
+    check(currentProvider.dea_license_exp, "DEA License");
+  }, [currentProvider?.id]);
+
   useEffect(() => {
     const hash = window.location.hash;
     if (hash.includes("type=invite")) setIsInvite(true);
@@ -243,6 +264,7 @@ function AppInner() {
     if (sub === "vacations")     return <UpcomingVacationsPage onBack={()=>setSub(null)}/>;
     if (sub === "logic")         return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (sub === "print")         return <PrintSchedulePage onBack={()=>setSub(null)}/>;
+    if (sub === "licenses")      return <LicensesPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (sub === "settings")      return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider} onProfileSaved={() => fetchCurrentProvider(session.user.email).then(setCurrentProvider)}/>;
     if (sub === "notifications") return <NotificationsPage onBack={()=>setSub(null)} currentProvider={currentProvider} onNavigate={handleNotifNavigate}/>;
     if (tab === "home")      return <HomePage currentProvider={currentProvider}/>;
