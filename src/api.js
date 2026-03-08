@@ -143,7 +143,9 @@ export async function updateNoCallDayStatus(requestId, status, providerId, day) 
   const { error } = await supabase.from("no_call_day_requests").update({ status }).eq("id", requestId);
   if (error) { console.error("updateNoCallDayStatus:", error); return false; }
   if (status === "Approved") {
-    const { error: e2 } = await supabase.from("providers").update({ no_call_day: day }).eq("id", providerId);
+    const DAY_MAP = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
+    const dayNum = typeof day === "number" ? day : (DAY_MAP[day] ?? parseInt(day));
+    const { error: e2 } = await supabase.from("providers").update({ no_call_day: dayNum }).eq("id", providerId);
     if (e2) console.error("updateNoCallDay:", e2);
   }
   return !error;
