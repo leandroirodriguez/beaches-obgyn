@@ -2887,7 +2887,7 @@ export function AdminPage({ onBack }) {
         ))}
       </>}
 
-      {tab === "schedule" && <><AIScheduleGenerator/><ScheduleAndHistory providers={providers}/></>}
+      {tab === "schedule" && <><AIScheduleGenerator/><div style={{height:16}}/><ScheduleAndHistory providers={providers}/></>}
 
     </div>
   );
