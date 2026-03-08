@@ -3550,7 +3550,7 @@ export function FairnessPage({ onBack }) {
   };
 
   useEffect(() => {
-    fetchProviders().then(setProviders);
+    fetchProviders().then(all => setProviders(all.filter(p => !p.is_read_only)));
   }, []);
 
   useEffect(() => {
