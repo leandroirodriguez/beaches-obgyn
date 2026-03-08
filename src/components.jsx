@@ -78,6 +78,14 @@ export function IcoUnlock({color, size=22}) {
     </svg>
   );
 }
+export function IcoNoCall({color, size=16}) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx={12} cy={12} r={9} stroke={color} strokeWidth={2}/>
+      <line x1={5.5} y1={5.5} x2={18.5} y2={18.5} stroke={color} strokeWidth={2} strokeLinecap="round"/>
+    </svg>
+  );
+}
 export function IcoClipboard({color}) {
   return (
     <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
@@ -422,9 +430,12 @@ export function ProvidersPage({ onMessage, currentProvider }) {
               <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>{p.name}</p>
               <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:12, color:C.sub}}>{p.credentials}</p>
               {p.no_call_day && (
-                <p style={{margin:"3px 0 0", fontFamily:ffb, fontSize:11, color:C.teal}}>
-                  No-call: {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][p.no_call_day] || p.no_call_day}s
-                </p>
+                <div style={{display:"flex", alignItems:"center", gap:4, marginTop:3}}>
+                  <IcoNoCall color={C.teal} size={12}/>
+                  <p style={{margin:0, fontFamily:ffb, fontSize:11, color:C.teal}}>
+                    No-call: {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][p.no_call_day] || p.no_call_day}s
+                  </p>
+                </div>
               )}
             </div>
             <span style={{color:C.greyMid, fontSize:18}}>{open===p.id?"∨":"›"}</span>
@@ -467,7 +478,7 @@ export function ProvidersPage({ onMessage, currentProvider }) {
                     <>
                       <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:12, color:C.text}}>No-Call Day Preference</p>
                       <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:12, padding:"7px 10px", borderRadius:8, background:C.wave, border:`1px solid ${C.teal}44`}}>
-                        <span style={{fontSize:14}}>🚫</span>
+                        <IcoNoCall color={C.teal} size={15}/>
                         <span style={{fontFamily:ffb, fontSize:12, color:C.text}}>
                           {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][p.no_call_day] || p.no_call_day}s — approved recurring no-call day
                         </span>
