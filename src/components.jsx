@@ -1045,7 +1045,7 @@ export function RequestPage({ currentProvider }) {
               Current No-Call Day
             </p>
             <p style={{ margin: "4px 0 0", fontFamily: ff, fontWeight: 900, fontSize: 15, color: C.text }}>
-              {currentProvider.no_call_day}
+              {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][currentProvider.no_call_day] || currentProvider.no_call_day}
             </p>
           </div>
         )}
