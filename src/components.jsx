@@ -1837,15 +1837,7 @@ function AIScheduleGenerator() {
 
       setSummary(summaries.join("\n\n"));
 
-      // Notify ALL providers (including view-only) that a new schedule was published
-      const monthNames = monthsToGenerate.map(({ year: y, month: m }) => `${MONTHS[m]} ${y}`).join(", ");
-      sendPushNotification({
-        providerIds: allProviders.map(p => p.id),
-        title: "Schedule Published 📅",
-        body: `The call schedule for ${monthNames} is now available`,
-        data: { action: "home" },
-        notifKey: "published",
-      });
+      // Schedule published notification removed per admin preference
     } catch(err) {
       setError("Something went wrong. Please try again.");
       console.error(err);
