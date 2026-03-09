@@ -55,9 +55,6 @@ export default async function handler(req, res) {
     providers.map(p => `${p.name.replace("Dr. ","")}: ${hist[p.email].weekends}`).join(", "));
 
   // ── Normalize new providers to group average ──────────────────────────────
-  // A provider with 0 history in a group where others have many months
-  // would get overloaded trying to "catch up". Instead, set their counts
-  // to the group average so they're treated as equal peers.
   const providersWithHistory = providers.filter(p => hist[p.email].total > 0);
   if (providersWithHistory.length > 0) {
     const avgTotal    = Math.round(providersWithHistory.reduce((s, p) => s + hist[p.email].total, 0) / providersWithHistory.length);
@@ -109,11 +106,15 @@ export default async function handler(req, res) {
       gapOk(p.email, dateStr)
     );
     if (eligible.length === 0) {
-      // Relax gap
+      // Relax gap constraint
       eligible = candidates.filter(p =>
         !excludeEmails.includes(p.email) &&
         !isBlocked(p.email, dateStr)
       );
+    }
+    // FIX: if still no one, relax everything except blocked — ensures no day is left blank
+    if (eligible.length === 0) {
+      eligible = candidates.filter(p => !isBlocked(p.email, dateStr));
     }
     if (eligible.length === 0) return null;
     eligible.sort((a, b) => {
@@ -137,15 +138,11 @@ export default async function handler(req, res) {
     lastAssigned[email] = dateStr;
   };
 
-  // 1. Saturdays — max 1 per provider per month, fewest weekends first
-  const satAssignedThisMonth = {};
+  // 1. Saturdays — fewest weekends first, NO cap on how many per provider per month
+  //    (cap caused blank days in months with many blocked providers)
   for (const satDate of saturdays) {
-    const candidates = providers.filter(p => !satAssignedThisMonth[p.email]);
-    const pick = pickBest(candidates, satDate, "weekends");
-    if (pick) {
-      assign(pick.email, satDate, "weekends");
-      satAssignedThisMonth[pick.email] = true;
-    }
+    const pick = pickBest(providers, satDate, "weekends");
+    if (pick) assign(pick.email, satDate, "weekends");
   }
 
   // 2. Fridays — must differ from adjacent Saturday
@@ -163,13 +160,36 @@ export default async function handler(req, res) {
     if (pick) assign(pick.email, wdDate, "weekdays");
   }
 
-  // 4. Mirror Saturday → Sunday
+  // 4. Mirror Saturday → Sunday (handles same-month AND cross-month boundary)
+  //    If month starts on Sunday, mirror from last Saturday of prior month
+  const firstDayDow = new Date(year, month, 1).getDay();
+  if (firstDayDow === 0) {
+    // First day of this month is Sunday — find who had last Saturday of prior month
+    const prevMonthLastDay = new Date(year, month, 0); // last day of prior month
+    const prevSatStr = `${prevMonthLastDay.getFullYear()}-${String(prevMonthLastDay.getMonth()+1).padStart(2,"0")}-${String(prevMonthLastDay.getDate()).padStart(2,"0")}`;
+    const sunStr = `${year}-${String(month+1).padStart(2,"0")}-01`;
+    // Look up prior month's last Saturday from DB
+    const { data: prevSatRow } = await supabase
+      .from("call_schedule")
+      .select("providers(email)")
+      .eq("date", prevSatStr)
+      .single();
+    const prevSatEmail = prevSatRow?.providers?.email;
+    if (prevSatEmail && !isBlocked(prevSatEmail, sunStr)) {
+      schedule[sunStr] = prevSatEmail;
+      console.log(`[generate-schedule] Cross-month mirror: ${sunStr} (Sun) → ${prevSatEmail} from ${prevSatStr} (Sat)`);
+    }
+  }
+
   for (let d = 1; d <= daysInMonth; d++) {
     if (new Date(year, month, d).getDay() === 6) {
       const satStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
       const sunDate = new Date(year, month, d + 1);
-      const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
-      if (schedule[satStr]) schedule[sunStr] = schedule[satStr];
+      // Only mirror if Sunday is still within the same month
+      if (sunDate.getMonth() === month) {
+        const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
+        if (schedule[satStr]) schedule[sunStr] = schedule[satStr];
+      }
     }
   }
 
