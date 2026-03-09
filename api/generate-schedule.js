@@ -99,47 +99,38 @@ export default async function handler(req, res) {
     return diff > minGap;
   };
 
-  const pickBest = (candidates, dateStr, category, excludeEmails = []) => {
-    // Try with full gap (4 days)
-    let eligible = candidates.filter(p =>
-      !excludeEmails.includes(p.email) &&
-      !isBlocked(p.email, dateStr) &&
-      gapOk(p.email, dateStr, 4)
-    );
-    // Relax to 2-day gap
-    if (eligible.length === 0) {
-      eligible = candidates.filter(p =>
-        !excludeEmails.includes(p.email) &&
-        !isBlocked(p.email, dateStr) &&
-        gapOk(p.email, dateStr, 2)
-      );
-    }
-    // Relax to 1-day gap (no back-to-back)
-    if (eligible.length === 0) {
-      eligible = candidates.filter(p =>
-        !excludeEmails.includes(p.email) &&
-        !isBlocked(p.email, dateStr) &&
-        gapOk(p.email, dateStr, 1)
-      );
-    }
-    // Last resort: anyone not blocked (may result in consecutive days but avoids blank)
-    if (eligible.length === 0) {
-      eligible = candidates.filter(p => !isBlocked(p.email, dateStr));
-    }
-    if (eligible.length === 0) return null;
-    eligible.sort((a, b) => {
+  // Sort eligible providers: gap is king (no back-to-back), then fairness
+  const sortEligible = (eligible, dateStr, category) => {
+    return eligible.slice().sort((a, b) => {
       const gapA = lastAssigned[a.email] ? (new Date(dateStr+"T00:00:00") - new Date(lastAssigned[a.email]+"T00:00:00")) / 86400000 : 999;
       const gapB = lastAssigned[b.email] ? (new Date(dateStr+"T00:00:00") - new Date(lastAssigned[b.email]+"T00:00:00")) / 86400000 : 999;
-      // If category counts differ by more than 1, prioritize fairness
       const catDiff = hist[a.email][category] - hist[b.email][category];
-      if (Math.abs(catDiff) > 1) return catDiff;
-      // If total counts differ by more than 2, prioritize fairness
       const totDiff = hist[a.email].total - hist[b.email].total;
+      // If one person worked yesterday and another didn't, always prefer the rested one
+      const aWorkedYesterday = gapA <= 1;
+      const bWorkedYesterday = gapB <= 1;
+      if (aWorkedYesterday !== bWorkedYesterday) return aWorkedYesterday ? 1 : -1;
+      // Among those with similar rest, use fairness
+      if (Math.abs(catDiff) > 1) return catDiff;
       if (Math.abs(totDiff) > 2) return totDiff;
-      // Otherwise prioritize whoever has rested longest (avoids consecutive days)
       return gapB - gapA;
     });
-    return eligible[0];
+  };
+
+  const pickBest = (candidates, dateStr, category, excludeEmails = []) => {
+    const notBlocked = candidates.filter(p =>
+      !excludeEmails.includes(p.email) && !isBlocked(p.email, dateStr)
+    );
+    // Try full gap (4 days)
+    let eligible = notBlocked.filter(p => gapOk(p.email, dateStr, 4));
+    // Relax to 2-day gap
+    if (eligible.length === 0) eligible = notBlocked.filter(p => gapOk(p.email, dateStr, 2));
+    // Relax to 1-day gap (no back-to-back)
+    if (eligible.length === 0) eligible = notBlocked.filter(p => gapOk(p.email, dateStr, 1));
+    // Last resort: anyone not blocked (avoids blank days)
+    if (eligible.length === 0) eligible = notBlocked;
+    if (eligible.length === 0) return null;
+    return sortEligible(eligible, dateStr, category)[0];
   };
 
   const schedule = {};
@@ -151,11 +142,16 @@ export default async function handler(req, res) {
     lastAssigned[email] = dateStr;
   };
 
-  // 1. Saturdays — fewest weekends first, NO cap on how many per provider per month
-  //    (cap caused blank days in months with many blocked providers)
+  // 1. Saturdays — prefer providers with no weekend this month yet, allow repeats only if needed
+  const satAssignedThisMonth = {};
   for (const satDate of saturdays) {
-    const pick = pickBest(providers, satDate, "weekends");
-    if (pick) assign(pick.email, satDate, "weekends");
+    const noWeekendYet = providers.filter(p => !satAssignedThisMonth[p.email]);
+    let pick = pickBest(noWeekendYet, satDate, "weekends");
+    if (!pick) pick = pickBest(providers, satDate, "weekends");
+    if (pick) {
+      assign(pick.email, satDate, "weekends");
+      satAssignedThisMonth[pick.email] = (satAssignedThisMonth[pick.email] || 0) + 1;
+    }
   }
 
   // 2. Fridays — must differ from adjacent Saturday
