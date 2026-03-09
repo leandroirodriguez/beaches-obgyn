@@ -100,30 +100,43 @@ export default async function handler(req, res) {
   };
 
   const pickBest = (candidates, dateStr, category, excludeEmails = []) => {
+    // Try with full gap (4 days)
     let eligible = candidates.filter(p =>
       !excludeEmails.includes(p.email) &&
       !isBlocked(p.email, dateStr) &&
-      gapOk(p.email, dateStr)
+      gapOk(p.email, dateStr, 4)
     );
+    // Relax to 2-day gap
     if (eligible.length === 0) {
-      // Relax gap constraint
       eligible = candidates.filter(p =>
         !excludeEmails.includes(p.email) &&
-        !isBlocked(p.email, dateStr)
+        !isBlocked(p.email, dateStr) &&
+        gapOk(p.email, dateStr, 2)
       );
     }
-    // FIX: if still no one, relax everything except blocked — ensures no day is left blank
+    // Relax to 1-day gap (no back-to-back)
+    if (eligible.length === 0) {
+      eligible = candidates.filter(p =>
+        !excludeEmails.includes(p.email) &&
+        !isBlocked(p.email, dateStr) &&
+        gapOk(p.email, dateStr, 1)
+      );
+    }
+    // Last resort: anyone not blocked (may result in consecutive days but avoids blank)
     if (eligible.length === 0) {
       eligible = candidates.filter(p => !isBlocked(p.email, dateStr));
     }
     if (eligible.length === 0) return null;
     eligible.sort((a, b) => {
-      if (hist[a.email][category] !== hist[b.email][category])
-        return hist[a.email][category] - hist[b.email][category];
-      if (hist[a.email].total !== hist[b.email].total)
-        return hist[a.email].total - hist[b.email].total;
       const gapA = lastAssigned[a.email] ? (new Date(dateStr+"T00:00:00") - new Date(lastAssigned[a.email]+"T00:00:00")) / 86400000 : 999;
       const gapB = lastAssigned[b.email] ? (new Date(dateStr+"T00:00:00") - new Date(lastAssigned[b.email]+"T00:00:00")) / 86400000 : 999;
+      // If category counts differ by more than 1, prioritize fairness
+      const catDiff = hist[a.email][category] - hist[b.email][category];
+      if (Math.abs(catDiff) > 1) return catDiff;
+      // If total counts differ by more than 2, prioritize fairness
+      const totDiff = hist[a.email].total - hist[b.email].total;
+      if (Math.abs(totDiff) > 2) return totDiff;
+      // Otherwise prioritize whoever has rested longest (avoids consecutive days)
       return gapB - gapA;
     });
     return eligible[0];
