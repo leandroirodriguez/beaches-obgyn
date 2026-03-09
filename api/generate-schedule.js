@@ -167,9 +167,18 @@ export default async function handler(req, res) {
     if (pick) assign(pick.email, friDate, "fridays");
   }
 
-  // 3. Weekdays
+  // 3. Weekdays — exclude whoever worked the immediately preceding weekend
   for (const wdDate of weekdays) {
-    const pick = pickBest(providers, wdDate, "weekdays");
+    const d = new Date(wdDate + "T00:00:00");
+    const dow = d.getDay(); // 1=Mon, 2=Tue, 3=Wed, 4=Thu
+    let excludeFromWeekend = [];
+    if (dow === 1) {
+      // Monday — exclude whoever worked Sunday (= Saturday person)
+      const sunDate = new Date(d); sunDate.setDate(sunDate.getDate() - 1);
+      const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
+      if (schedule[sunStr]) excludeFromWeekend = [schedule[sunStr]];
+    }
+    const pick = pickBest(providers, wdDate, "weekdays", excludeFromWeekend);
     if (pick) assign(pick.email, wdDate, "weekdays");
   }
 
