@@ -99,38 +99,36 @@ export default async function handler(req, res) {
     return diff > minGap;
   };
 
-  // Sort eligible providers: gap is king (no back-to-back), then fairness
-  const sortEligible = (eligible, dateStr, category) => {
-    return eligible.slice().sort((a, b) => {
-      const gapA = lastAssigned[a.email] ? (new Date(dateStr+"T00:00:00") - new Date(lastAssigned[a.email]+"T00:00:00")) / 86400000 : 999;
-      const gapB = lastAssigned[b.email] ? (new Date(dateStr+"T00:00:00") - new Date(lastAssigned[b.email]+"T00:00:00")) / 86400000 : 999;
-      const catDiff = hist[a.email][category] - hist[b.email][category];
-      const totDiff = hist[a.email].total - hist[b.email].total;
-      // If one person worked yesterday and another didn't, always prefer the rested one
-      const aWorkedYesterday = gapA <= 1;
-      const bWorkedYesterday = gapB <= 1;
-      if (aWorkedYesterday !== bWorkedYesterday) return aWorkedYesterday ? 1 : -1;
-      // Among those with similar rest, use fairness
-      if (Math.abs(catDiff) > 1) return catDiff;
-      if (Math.abs(totDiff) > 2) return totDiff;
-      return gapB - gapA;
-    });
-  };
-
+  // Pick best provider for a given date/category
+  // Priority: 1) never back-to-back, 2) fewest calls in this category, 3) longest rest
   const pickBest = (candidates, dateStr, category, excludeEmails = []) => {
     const notBlocked = candidates.filter(p =>
       !excludeEmails.includes(p.email) && !isBlocked(p.email, dateStr)
     );
-    // Try full gap (4 days)
-    let eligible = notBlocked.filter(p => gapOk(p.email, dateStr, 4));
-    // Relax to 2-day gap
-    if (eligible.length === 0) eligible = notBlocked.filter(p => gapOk(p.email, dateStr, 2));
-    // Relax to 1-day gap (no back-to-back)
-    if (eligible.length === 0) eligible = notBlocked.filter(p => gapOk(p.email, dateStr, 1));
-    // Last resort: anyone not blocked (avoids blank days)
-    if (eligible.length === 0) eligible = notBlocked;
-    if (eligible.length === 0) return null;
-    return sortEligible(eligible, dateStr, category)[0];
+    if (notBlocked.length === 0) return null;
+
+    const gap = (email) => {
+      const last = lastAssigned[email];
+      if (!last) return 999;
+      return Math.floor((new Date(dateStr+"T00:00:00") - new Date(last+"T00:00:00")) / 86400000);
+    };
+
+    // Sort: back-to-back is always last resort, then fewest category calls, then longest rest
+    const sorted = notBlocked.slice().sort((a, b) => {
+      const aGap = gap(a.email);
+      const bGap = gap(b.email);
+      const aBackToBack = aGap <= 1;
+      const bBackToBack = bGap <= 1;
+      // Never pick back-to-back if anyone else is available
+      if (aBackToBack !== bBackToBack) return aBackToBack ? 1 : -1;
+      // Fewest calls in this category
+      const catDiff = hist[a.email][category] - hist[b.email][category];
+      if (catDiff !== 0) return catDiff;
+      // Longest rest as tiebreaker
+      return bGap - aGap;
+    });
+
+    return sorted[0];
   };
 
   const schedule = {};
@@ -142,7 +140,9 @@ export default async function handler(req, res) {
     lastAssigned[email] = dateStr;
   };
 
-  // 1. Saturdays — prefer providers with no weekend this month yet, allow repeats only if needed
+  // 1. Saturdays + immediately mirror to Sunday
+  //    Mirror happens here (before Fridays/weekdays) so lastAssigned is correct
+  //    for gap checks in subsequent steps.
   const satAssignedThisMonth = {};
   for (const satDate of saturdays) {
     const noWeekendYet = providers.filter(p => !satAssignedThisMonth[p.email]);
@@ -151,6 +151,13 @@ export default async function handler(req, res) {
     if (pick) {
       assign(pick.email, satDate, "weekends");
       satAssignedThisMonth[pick.email] = (satAssignedThisMonth[pick.email] || 0) + 1;
+      // Mirror Saturday → Sunday immediately so lastAssigned reflects Sunday
+      const sunDate = new Date(new Date(satDate+"T00:00:00").getTime() + 86400000);
+      if (sunDate.getMonth() === month) {
+        const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
+        schedule[sunStr] = pick.email;
+        lastAssigned[pick.email] = sunStr; // critical: gap checks now see Sunday as last day
+      }
     }
   }
 
@@ -199,14 +206,15 @@ export default async function handler(req, res) {
     }
   }
 
+  // Same-month Sat→Sun mirroring is handled inline in step 1 above.
+  // (Kept here as safety net for any edge cases)
   for (let d = 1; d <= daysInMonth; d++) {
     if (new Date(year, month, d).getDay() === 6) {
       const satStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
       const sunDate = new Date(year, month, d + 1);
-      // Only mirror if Sunday is still within the same month
       if (sunDate.getMonth() === month) {
         const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
-        if (schedule[satStr]) schedule[sunStr] = schedule[satStr];
+        if (schedule[satStr] && !schedule[sunStr]) schedule[sunStr] = schedule[satStr];
       }
     }
   }
