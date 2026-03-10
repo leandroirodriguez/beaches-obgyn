@@ -318,3 +318,14 @@ export async function unlockMonth(year, month) {
   if (error) console.error("unlockMonth:", error);
   return !error;
 }
+
+export async function clearMonthSchedule(year, month) {
+  const start = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const end = `${year}-${String(month + 1).padStart(2, "0")}-31`;
+  const { error } = await supabase.from("call_schedule")
+    .delete()
+    .gte("date", start)
+    .lte("date", end);
+  if (error) console.error("clearMonthSchedule:", error);
+  return !error;
+}

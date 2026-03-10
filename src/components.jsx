@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs, updateProviderProfile, fetchScheduleLocks, lockMonth, unlockMonth } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs, updateProviderProfile, fetchScheduleLocks, lockMonth, unlockMonth, clearMonthSchedule } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -601,6 +601,19 @@ export function RequestPage({ currentProvider }) {
       setNoCallDay("");
       setNoCallNotes("");
       fetchNoCallDayRequests(currentProvider.id).then(setNoCallReqs);
+      // Notify admins
+      const allProviders = await fetchProviders();
+      const adminIds = allProviders.filter(p => p.is_admin && !p.is_read_only).map(p => p.id);
+      const dayNames = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+      if (adminIds.length > 0) {
+        sendPushNotification({
+          providerIds: adminIds,
+          title: "New No-Call Day Request",
+          body: `${currentProvider.name} requested ${dayNames[noCallDay] || "a day"} as a recurring no-call day`,
+          data: { action: "admin-requests" },
+          notifKey: "changes",
+        });
+      }
       setTimeout(() => setNoCallDone(false), 2500);
     }
     setNoCallLoading(false);
@@ -1794,6 +1807,18 @@ function AIScheduleGenerator() {
   }
   const bulkBlocked = generatableMonths.length === 0;
 
+  const [clearing, setClearing] = useState(false);
+
+  const handleClear = async () => {
+    if (!window.confirm(`Clear the entire ${MONTHS[month]} ${year} schedule? This cannot be undone.`)) return;
+    setClearing(true);
+    await clearMonthSchedule(year, month);
+    await refreshCompleteness();
+    setSummary(null);
+    setError(null);
+    setClearing(false);
+  };
+
   const handleGenerate = async () => {
     if (bulk ? bulkBlocked : isBlocked) return;
     setLoading(true);
@@ -1984,6 +2009,21 @@ function AIScheduleGenerator() {
               </div>
             )}
             {error && <p style={{fontFamily:ffb, fontSize:12, color:"#e05555", marginBottom:12}}>{error}</p>}
+
+            {/* Clear month button — only when unlocked and month has data */}
+            {!bulk && !isMonthLocked(year, month) && completeMonths[`${year}-${month}`] !== undefined && (
+              <button
+                onClick={handleClear}
+                disabled={clearing}
+                style={{
+                  width: "100%", padding: "11px", borderRadius: 10, border: `1px solid #e05555`,
+                  fontFamily: ff, fontWeight: 800, fontSize: 14, cursor: clearing ? "not-allowed" : "pointer",
+                  background: "#fff", color: "#e05555", marginBottom: 8, opacity: clearing ? 0.5 : 1,
+                }}
+              >
+                {clearing ? "Clearing…" : `Clear ${MONTHS[month]} ${year} Schedule`}
+              </button>
+            )}
 
             <button
               style={btnS({opacity: (loading || (bulk ? bulkBlocked : isBlocked)) ? 0.5 : 1, cursor: (bulk ? bulkBlocked : isBlocked) ? "not-allowed" : "pointer"})}
