@@ -568,7 +568,7 @@ export function RequestPage({ currentProvider }) {
   const [noCallLoading, setNoCallLoading] = useState(false);
   const [noCallSelected, setNoCallSelected] = useState([]); // selected days (unordered)
   const [noCallRanked, setNoCallRanked]     = useState([]); // ranked ordered list
-  const [dragIdx, setDragIdx]               = useState(null);
+
 
   const [incomingSwitch, setIncomingSwitch] = useState([]);
 
@@ -616,31 +616,18 @@ export function RequestPage({ currentProvider }) {
   const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
   const toggleNoCallDay = (day) => {
+    const num = DAY_NUMS[day];
     setNoCallSelected(prev => {
       const next = prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day];
-      // Keep ranked in sync — add new day at end, remove deselected
+      // Keep ranked in sync using day numbers
       setNoCallRanked(ranked => {
-        const filtered = ranked.filter(d => next.includes(d));
-        const toAdd = next.filter(d => !filtered.includes(d));
+        const filtered = ranked.filter(d => next.includes(DAY_NAMES[d]));
+        const toAdd = next.filter(d => !filtered.includes(DAY_NUMS[d])).map(d => DAY_NUMS[d]);
         return [...filtered, ...toAdd];
       });
       return next;
     });
   };
-
-  const handleDragStart = (idx) => setDragIdx(idx);
-  const handleDragOver = (e, idx) => {
-    e.preventDefault();
-    if (dragIdx === null || dragIdx === idx) return;
-    setNoCallRanked(prev => {
-      const next = [...prev];
-      const [moved] = next.splice(dragIdx, 1);
-      next.splice(idx, 0, moved);
-      setDragIdx(idx);
-      return next;
-    });
-  };
-  const handleDragEnd = () => setDragIdx(null);
 
   const handleNoCallSubmit = async () => {
     if (noCallRanked.length === 0 || !currentProvider) return;
@@ -1113,14 +1100,16 @@ export function RequestPage({ currentProvider }) {
               </p>
               <button onClick={async () => {
                 if (!window.confirm("Request removal of your no-call day preferences? An admin will need to approve.")) return;
+                await submitNoCallDayRequest({ providerId: currentProvider.id, requestedDay: "Remove", rankedDays: null, notes: "Provider requested removal of all no-call day preferences." });
+                fetchNoCallDayRequests(currentProvider.id).then(setNoCallReqs);
                 const allProviders = await fetchProviders();
                 const adminIds = allProviders.filter(p => p.is_admin && !p.is_read_only).map(p => p.id);
                 sendPushNotification({ providerIds: adminIds, title: "No-Call Day Removal Request",
-                  body: `${currentProvider.name} has requested removal of their no-call day preferences`,
+                  body: `${currentProvider.name} requested removal of their no-call days. Go to Admin → No-Call tab to approve.`,
                   data: { action: "admin-requests" }, notifKey: "changes" });
-                alert("Removal request sent to admin.");
-              }} style={{ background:"none", border:"none", fontFamily:ffb, fontSize:11, color:C.coral, cursor:"pointer", padding:0 }}>
-                Request removal
+                alert("Removal request submitted. An admin will review it shortly.");
+              }} style={{ background:C.coral, border:"none", borderRadius:6, fontFamily:ff, fontWeight:800, fontSize:11, color:"#fff", cursor:"pointer", padding:"4px 10px" }}>
+                🗑 Remove
               </button>
             </div>
             {(currentProvider.no_call_days?.length ? currentProvider.no_call_days : [currentProvider.no_call_day]).map((d, i) => (
@@ -1138,7 +1127,7 @@ export function RequestPage({ currentProvider }) {
         )}
         <div style={card({ padding: "14px", marginBottom: 14 })}>
           <p style={{ margin: "0 0 4px", fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>Submit a New Request</p>
-          <p style={{ margin: "0 0 12px", fontFamily: ffb, fontSize: 11, color: C.sub }}>Select one or more days, then drag to set priority order.</p>
+          <p style={{ margin: "0 0 12px", fontFamily: ffb, fontSize: 11, color: C.sub }}>Select one or more days, then use ▲▼ to set priority order.</p>
 
           {/* Step 1: Select days */}
           <span style={lblS}>Select Days</span>
@@ -1159,41 +1148,57 @@ export function RequestPage({ currentProvider }) {
             })}
           </div>
 
-          {/* Step 2: Drag to rank */}
-          {noCallRanked.length > 1 && (
+          {/* Step 2: Rank with ▲▼ buttons */}
+          {noCallRanked.length > 0 && (
             <>
-              <span style={lblS}>Drag to Set Priority (top = most important)</span>
-              <div style={{ marginBottom:12 }}>
+              <span style={lblS}>
+                {noCallRanked.length > 1 ? "Set Priority Order (top = hardest to override)" : "Selected Day"}
+              </span>
+              <div style={{ marginBottom:8 }}>
                 {noCallRanked.map((dayNum, i) => (
-                  <div key={dayNum}
-                    draggable
-                    onDragStart={() => handleDragStart(i)}
-                    onDragOver={e => handleDragOver(e, i)}
-                    onDragEnd={handleDragEnd}
-                    style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", marginBottom:6,
-                      borderRadius:8, border:`1.5px solid ${i===0?C.teal:C.grey}`,
-                      background: i===0?C.wave:"#fafafa", cursor:"grab",
-                      opacity: dragIdx===i?0.5:1 }}>
-                    <span style={{ fontSize:16, color:C.greyMid }}>☰</span>
-                    <span style={{ fontFamily:ff, fontWeight:900, fontSize:13, color:i===0?C.teal:C.sub, minWidth:18 }}>{i+1}.</span>
-                    <span style={{ fontFamily:ff, fontWeight:800, fontSize:14, color:i===0?C.teal:C.text, flex:1 }}>
-                      {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dayNum]}
-                    </span>
-                    <span style={{ fontFamily:ffb, fontSize:11, color:i===0?C.teal:C.sub }}>
-                      {i===0?"← most important":"lower priority"}
-                    </span>
+                  <div key={dayNum} style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 14px", marginBottom:6,
+                    borderRadius:10, border:`2px solid ${i===0?C.teal:C.grey}`,
+                    background: i===0?C.wave:"#fafafa" }}>
+                    <div style={{ flex:1 }}>
+                      <p style={{ margin:0, fontFamily:ff, fontWeight:900, fontSize:15, color:i===0?C.teal:C.text }}>
+                        {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dayNum]}
+                      </p>
+                      <p style={{ margin:"1px 0 0", fontFamily:ffb, fontSize:11, color:i===0?C.teal:C.sub }}>
+                        {i===0
+                          ? noCallRanked.length > 1 ? "1st priority — hardest to override" : "Will be respected whenever possible"
+                          : `${i===1?"2nd":i===2?"3rd":`${i+1}th`} priority`}
+                      </p>
+                    </div>
+                    {noCallRanked.length > 1 && (
+                      <div style={{ display:"flex", flexDirection:"column", gap:3 }}>
+                        <button disabled={i===0} onClick={() => setNoCallRanked(prev => {
+                          const next=[...prev]; [next[i-1],next[i]]=[next[i],next[i-1]]; return next;
+                        })} style={{ background: i===0?"#f0f0f0":C.wave, border:`1px solid ${i===0?C.grey:C.teal+"44"}`,
+                          borderRadius:5, width:30, height:26, cursor:i===0?"default":"pointer",
+                          fontSize:13, color:i===0?C.greyMid:C.teal, opacity:i===0?0.3:1 }}>▲</button>
+                        <button disabled={i===noCallRanked.length-1} onClick={() => setNoCallRanked(prev => {
+                          const next=[...prev]; [next[i],next[i+1]]=[next[i+1],next[i]]; return next;
+                        })} style={{ background: i===noCallRanked.length-1?"#f0f0f0":"#f0f0f0",
+                          border:`1px solid ${C.grey}`, borderRadius:5, width:30, height:26,
+                          cursor:i===noCallRanked.length-1?"default":"pointer",
+                          fontSize:13, color:C.sub, opacity:i===noCallRanked.length-1?0.3:1 }}>▼</button>
+                      </div>
+                    )}
+                    <button onClick={() => {
+                      const dayName = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dayNum];
+                      setNoCallRanked(prev => prev.filter((_,idx) => idx !== i));
+                      setNoCallSelected(prev => prev.filter(d => d !== dayName));
+                    }} style={{ background:"none", border:"none", color:C.greyMid, fontSize:20,
+                      cursor:"pointer", padding:"0 2px", lineHeight:1 }}>×</button>
                   </div>
                 ))}
               </div>
+              {noCallRanked.length > 1 && (
+                <p style={{ margin:"0 0 12px", fontFamily:ffb, fontSize:11, color:C.sub }}>
+                  💡 Use ▲▼ to set which day is most important to protect from override.
+                </p>
+              )}
             </>
-          )}
-
-          {noCallRanked.length === 1 && (
-            <div style={{ padding:"9px 12px", marginBottom:12, borderRadius:8, background:C.wave, border:`1px solid ${C.teal}44` }}>
-              <span style={{ fontFamily:ffb, fontSize:12, color:C.text }}>
-                Selected: <strong>{["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][noCallRanked[0]]}</strong>
-              </span>
-            </div>
           )}
 
           <span style={lblS}>Notes (optional)</span>
@@ -3028,26 +3033,38 @@ export function AdminPage({ onBack }) {
           </div>
         )}
         {noCallReqs.map(r => (
-          <div key={r.id} style={card({padding:"13px 16px", marginBottom:10})}>
+          <div key={r.id} style={card({padding:"13px 16px", marginBottom:10, borderLeft: r.requested_day==="Remove" ? `3px solid ${C.coral}` : "none"})}>
             <div style={{display:"flex", alignItems:"center", gap:10, marginBottom: r.status === "Pending" ? 10 : 0}}>
               {r.providers && <Avatar p={r.providers} size={36}/>}
               <div style={{flex:1}}>
                 <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:13, color:C.text}}>{r.providers?.name}</p>
-                {r.ranked_days?.length
-                  ? r.ranked_days.map((d,i) => (
-                      <p key={d} style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color: i===0?C.teal:C.sub}}>
-                        {i+1}. {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d]} {i===0?"(top priority)":""}
-                      </p>
-                    ))
-                  : <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>Recurring · {r.requested_day}</p>
+                {r.requested_day === "Remove"
+                  ? <p style={{margin:"2px 0 0", fontFamily:ff, fontWeight:700, fontSize:11, color:C.coral}}>🗑 Requests removal of all no-call days</p>
+                  : r.ranked_days?.length
+                    ? r.ranked_days.map((d,i) => (
+                        <p key={d} style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color: i===0?C.teal:C.sub}}>
+                          {i+1}. {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d]} {i===0?"(top priority)":""}
+                        </p>
+                      ))
+                    : <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>Recurring · {r.requested_day}</p>
                 }
-                {r.notes && <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{r.notes}</p>}
+                {r.notes && r.requested_day !== "Remove" && <p style={{margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub}}>{r.notes}</p>}
               </div>
               <span style={badge(r.status)}>{r.status}</span>
             </div>
             {r.status === "Pending" && (
               <div style={{display:"flex", gap:8}}>
-                <button style={btnS({flex:1, padding:"9px", fontSize:12, background:"#65b896"})} onClick={()=>handleNoCallStatus(r.id,"Approved",r.provider_id,r.requested_day,r.ranked_days)}>Approve</button>
+                <button style={btnS({flex:1, padding:"9px", fontSize:12, background: r.requested_day==="Remove"?C.coral:"#65b896"})}
+                  onClick={async () => {
+                    if (r.requested_day === "Remove") {
+                      await clearNoCallDays(r.provider_id);
+                      await handleNoCallStatus(r.id, "Approved", r.provider_id, "Remove", null);
+                    } else {
+                      await handleNoCallStatus(r.id, "Approved", r.provider_id, r.requested_day, r.ranked_days);
+                    }
+                  }}>
+                  {r.requested_day === "Remove" ? "Approve Removal" : "Approve"}
+                </button>
                 <button style={btnS({flex:1, padding:"9px", fontSize:12, background:C.coral})} onClick={()=>handleNoCallStatus(r.id,"Denied",r.provider_id,r.requested_day)}>Deny</button>
               </div>
             )}
