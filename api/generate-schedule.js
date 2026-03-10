@@ -98,13 +98,19 @@ export default async function handler(req, res) {
       dateStr >= r.start_date && dateStr <= r.end_date
     );
 
-  // Soft block: recurring no-call day — skip if possible, allow as last resort
-  const isSoftBlocked = (email, dateStr) => {
+  // Soft block: recurring no-call days — tiered by priority rank
+  // Returns: 0 = not blocked, 1 = secondary (skip if anyone else avail), 2 = primary (skip unless only option)
+  const noCallBlockLevel = (email, dateStr) => {
     const p = providerByEmail[email];
-    if (!p || p.no_call_day === null || p.no_call_day === undefined) return false;
     const dow = new Date(dateStr + "T00:00:00").getDay();
-    return dow === p.no_call_day;
+    // Use no_call_days array if available, fall back to no_call_day
+    const days = p?.no_call_days?.length ? p.no_call_days : (p?.no_call_day != null ? [p.no_call_day] : []);
+    const idx = days.indexOf(dow);
+    if (idx === -1) return 0;       // not a no-call day
+    if (idx === 0) return 2;        // top priority — hardest to override
+    return 1;                       // secondary — skip if anyone else available
   };
+  const isSoftBlocked = (email, dateStr) => noCallBlockLevel(email, dateStr) > 0;
 
   const lastAssigned = {};
   for (const p of providers) lastAssigned[p.email] = hist[p.email].lastDate;
@@ -136,12 +142,19 @@ export default async function handler(req, res) {
       return bGap - aGap;
     };
 
-    // Prefer providers NOT on their recurring no-call day
-    const preferred = eligible.filter(p => !isSoftBlocked(p.email, dateStr));
-    if (preferred.length > 0) return preferred.slice().sort(sortFn)[0];
+    // Tiered soft-block: prefer providers not on any no-call day
+    const notSoftBlocked = eligible.filter(p => noCallBlockLevel(p.email, dateStr) === 0);
+    if (notSoftBlocked.length > 0) return notSoftBlocked.slice().sort(sortFn)[0];
 
-    // Last resort: assign on recurring no-call day (avoids leaving day blank)
-    console.log(`[generate-schedule] WARNING: ${dateStr} assigned to provider on recurring no-call day (no other option)`);
+    // Next: allow secondary no-call days (lower priority) if no one else available
+    const notPrimaryBlocked = eligible.filter(p => noCallBlockLevel(p.email, dateStr) < 2);
+    if (notPrimaryBlocked.length > 0) {
+      console.log(`[generate-schedule] NOTE: ${dateStr} assigned to provider on secondary no-call day`);
+      return notPrimaryBlocked.slice().sort(sortFn)[0];
+    }
+
+    // Last resort: assign on top-priority no-call day (only if truly no other option)
+    console.log(`[generate-schedule] WARNING: ${dateStr} assigned to provider on PRIMARY no-call day (no other option)`);
     return eligible.slice().sort(sortFn)[0];
   };
 

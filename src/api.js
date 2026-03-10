@@ -130,22 +130,33 @@ export async function fetchNoCallDayRequests(providerId = null) {
   return data || [];
 }
 
-export async function submitNoCallDayRequest({ providerId, requestedDay, notes }) {
+export async function submitNoCallDayRequest({ providerId, requestedDay, rankedDays, notes }) {
+  // requestedDay = primary day (string), rankedDays = ordered array of day numbers
   const { data, error } = await supabase
     .from("no_call_day_requests")
-    .insert({ provider_id: providerId, requested_day: requestedDay, notes, status: "Pending" })
+    .insert({ provider_id: providerId, requested_day: requestedDay, ranked_days: rankedDays || null, notes, status: "Pending" })
     .select().single();
   if (error) console.error("submitNoCallDayRequest:", error);
   return { data, error };
 }
 
-export async function updateNoCallDayStatus(requestId, status, providerId, day) {
+export async function updateNoCallDayStatus(requestId, status, providerId, day, rankedDays = null) {
   const { error } = await supabase.from("no_call_day_requests").update({ status }).eq("id", requestId);
   if (error) { console.error("updateNoCallDayStatus:", error); return false; }
   if (status === "Approved") {
     const DAY_MAP = { Sunday:0, Monday:1, Tuesday:2, Wednesday:3, Thursday:4, Friday:5, Saturday:6 };
     const dayNum = typeof day === "number" ? day : (DAY_MAP[day] ?? parseInt(day));
-    const { error: e2 } = await supabase.from("providers").update({ no_call_day: dayNum }).eq("id", providerId);
+    let newDays;
+    if (rankedDays) {
+      newDays = rankedDays;
+    } else {
+      const { data: prov } = await supabase.from("providers").select("no_call_days").eq("id", providerId).single();
+      const existing = prov?.no_call_days || [];
+      newDays = existing.includes(dayNum) ? existing : [...existing, dayNum];
+    }
+    const { error: e2 } = await supabase.from("providers")
+      .update({ no_call_days: newDays, no_call_day: newDays[0] ?? null })
+      .eq("id", providerId);
     if (e2) console.error("updateNoCallDay:", e2);
   }
   return !error;
