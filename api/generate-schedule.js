@@ -86,8 +86,28 @@ export default async function handler(req, res) {
   const saturdays = allDates.filter(d => d.dow === 6).map(d => d.date);
   const weekdays  = allDates.filter(d => d.dow >= 1 && d.dow <= 4).map(d => d.date);
 
-  const isBlocked = (email, dateStr) =>
-    approvedRequests.some(r => r.email === email && dateStr >= r.start_date && dateStr <= r.end_date);
+  // Build email→provider map for quick lookup of no_call_day
+  const providerByEmail = {};
+  for (const p of providers) providerByEmail[p.email] = p;
+
+  // Hard block: Days Off OR Off Call Only requests — never assign call
+  const isHardBlocked = (email, dateStr) =>
+    approvedRequests.some(r =>
+      r.email === email &&
+      (r.type === "Days Off" || r.type === "Off Call Only") &&
+      dateStr >= r.start_date && dateStr <= r.end_date
+    );
+
+  // Soft block: recurring no-call day — skip if possible, allow as last resort
+  const isSoftBlocked = (email, dateStr) => {
+    const p = providerByEmail[email];
+    if (!p || p.no_call_day === null || p.no_call_day === undefined) return false;
+    const dow = new Date(dateStr + "T00:00:00").getDay();
+    return dow === p.no_call_day;
+  };
+
+  // isBlocked = hard block only
+  const isBlocked = (email, dateStr) => isHardBlocked(email, dateStr);
 
   const lastAssigned = {};
   for (const p of providers) lastAssigned[p.email] = hist[p.email].lastDate;
@@ -104,12 +124,13 @@ export default async function handler(req, res) {
   for (const p of providers) monthCount[p.email] = { weekends: 0, fridays: 0, weekdays: 0 };
 
   // Pick best provider for a given date/category
-  // Priority: 1) never back-to-back, 2) fewest assigned THIS month, 3) fewest all-time, 4) longest rest
+  // Priority: 1) never back-to-back, 2) fewest assigned THIS month, 3) longest rest
+  // Soft block (recurring no-call day): skipped if anyone else available, last resort only
   const pickBest = (candidates, dateStr, category, excludeEmails = []) => {
-    const notBlocked = candidates.filter(p =>
-      !excludeEmails.includes(p.email) && !isBlocked(p.email, dateStr)
+    const eligible = candidates.filter(p =>
+      !excludeEmails.includes(p.email) && !isHardBlocked(p.email, dateStr)
     );
-    if (notBlocked.length === 0) return null;
+    if (eligible.length === 0) return null;
 
     const gap = (email) => {
       const last = lastAssigned[email];
@@ -117,24 +138,21 @@ export default async function handler(req, res) {
       return Math.floor((new Date(dateStr+"T00:00:00") - new Date(last+"T00:00:00")) / 86400000);
     };
 
-    const sorted = notBlocked.slice().sort((a, b) => {
-      const aGap = gap(a.email);
-      const bGap = gap(b.email);
-      const aBackToBack = aGap <= 1;
-      const bBackToBack = bGap <= 1;
-      // Never pick back-to-back if anyone else is available
-      if (aBackToBack !== bBackToBack) return aBackToBack ? 1 : -1;
-      // Fewest assigned this category THIS month (strongest signal — prevents hoarding)
+    const sortFn = (a, b) => {
+      const aGap = gap(a.email); const bGap = gap(b.email);
+      if ((aGap <= 1) !== (bGap <= 1)) return aGap <= 1 ? 1 : -1;
       const monthDiff = monthCount[a.email][category] - monthCount[b.email][category];
       if (monthDiff !== 0) return monthDiff;
-      // Longest rest as tiebreaker (gap fairness within month)
       return bGap - aGap;
-      // Note: all-time history is intentionally NOT used here — the generator is called
-      // with up-to-date history already baked into hist[], so month-level balance is
-      // the right signal. Year-round fairness comes from history fed back each month.
-    });
+    };
 
-    return sorted[0];
+    // Prefer providers NOT on their recurring no-call day
+    const preferred = eligible.filter(p => !isSoftBlocked(p.email, dateStr));
+    if (preferred.length > 0) return preferred.slice().sort(sortFn)[0];
+
+    // Last resort: assign on recurring no-call day (avoids leaving day blank)
+    console.log(`[generate-schedule] WARNING: ${dateStr} assigned to provider on recurring no-call day (no other option)`);
+    return eligible.slice().sort(sortFn)[0];
   };
 
   const schedule = {};
