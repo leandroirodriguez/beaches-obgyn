@@ -2010,8 +2010,8 @@ function AIScheduleGenerator() {
             )}
             {error && <p style={{fontFamily:ffb, fontSize:12, color:"#e05555", marginBottom:12}}>{error}</p>}
 
-            {/* Clear month button — only when unlocked and month has data */}
-            {!bulk && !isMonthLocked(year, month) && completeMonths[`${year}-${month}`] !== undefined && (
+            {/* Clear month button — only when not locked */}
+            {!bulk && !isMonthLocked(year, month) && (
               <button
                 onClick={handleClear}
                 disabled={clearing}
