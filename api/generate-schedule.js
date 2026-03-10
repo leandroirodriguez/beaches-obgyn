@@ -147,50 +147,85 @@ export default async function handler(req, res) {
     lastAssigned[email] = dateStr;
   };
 
-  // 1. Weekdays first — assign before weekends so weekend assignments don't
-  //    poison gap scores for weekday picks (prevents providers with late-month
-  //    weekends from being shut out of early-month weekdays).
-  //    Monday exclusion of prior Sunday handled via schedule lookup.
-  for (const wdDate of weekdays) {
-    const d = new Date(wdDate + "T00:00:00");
-    const dow = d.getDay();
-    let excludeFromWeekend = [];
-    if (dow === 1) {
-      // Monday — exclude whoever worked Sunday (prior week's Saturday person)
-      const sunDate = new Date(d); sunDate.setDate(sunDate.getDate() - 1);
-      const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
-      if (schedule[sunStr]) excludeFromWeekend = [schedule[sunStr]];
-    }
-    const pick = pickBest(providers, wdDate, "weekdays", excludeFromWeekend);
-    if (pick) assign(pick.email, wdDate, "weekdays");
+  // Process all days in strict chronological order.
+  // For each day: Saturday → assign + immediately mirror Sunday (so lastAssigned
+  // is correct before the next day is processed). Friday → exclude adjacent Saturday
+  // provider if already known (it will be known since Sat comes after Fri in the week,
+  // but we look ahead). Weekday Mon → exclude prior Sunday provider.
+  //
+  // Weekend spreading: track satAssignedThisMonth to ensure one weekend per provider
+  // before allowing a second. This must be checked before gap/count sorting.
+
+  const satAssignedThisMonth = {};
+
+  // Build a full ordered list of all days to process (excluding Sundays — handled via mirror)
+  const allDays = [];
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dow = new Date(year, month, d).getDay();
+    if (dow === 0) continue; // Sundays handled by Saturday mirror
+    const dateStr = `${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    let cat = dow === 6 ? "weekends" : dow === 5 ? "fridays" : "weekdays";
+    allDays.push({ dateStr, dow, cat });
   }
 
-  // 2. Saturdays + immediately mirror to Sunday
-  const satAssignedThisMonth = {};
-  for (const satDate of saturdays) {
-    const noWeekendYet = providers.filter(p => !satAssignedThisMonth[p.email]);
-    let pick = pickBest(noWeekendYet, satDate, "weekends");
-    if (!pick) pick = pickBest(providers, satDate, "weekends");
-    if (pick) {
-      assign(pick.email, satDate, "weekends");
-      satAssignedThisMonth[pick.email] = (satAssignedThisMonth[pick.email] || 0) + 1;
-      const sunDate = new Date(new Date(satDate+"T00:00:00").getTime() + 86400000);
-      if (sunDate.getMonth() === month) {
+  for (const { dateStr, dow, cat } of allDays) {
+    if (cat === "weekends") {
+      // Saturday: spread one per provider first, then allow repeats
+      const noWeekendYet = providers.filter(p => !satAssignedThisMonth[p.email]);
+      let pick = pickBest(noWeekendYet, dateStr, "weekends");
+      if (!pick) pick = pickBest(providers, dateStr, "weekends");
+      if (pick) {
+        assign(pick.email, dateStr, "weekends");
+        satAssignedThisMonth[pick.email] = (satAssignedThisMonth[pick.email] || 0) + 1;
+        // Mirror to Sunday immediately so lastAssigned is correct for Monday
+        const sunDate = new Date(new Date(dateStr+"T00:00:00").getTime() + 86400000);
+        if (sunDate.getMonth() === month) {
+          const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
+          schedule[sunStr] = pick.email;
+          lastAssigned[pick.email] = sunStr;
+          monthCount[pick.email]["weekends"]++;
+        }
+      }
+    } else if (cat === "fridays") {
+      // Friday: exclude whoever has the following Saturday (already assigned above
+      // since we process chronologically and Sat comes after Fri in same week — 
+      // actually Sat is the NEXT day after Fri, so it's processed AFTER this Friday.
+      // Look ahead: find if next day (Sat) is already assigned from a prior week's carryover.
+      // In practice, the adjacent Saturday hasn't been assigned yet when we hit Friday.
+      // So we skip the exclusion here — the Saturday person will be assigned next iteration.
+      // To enforce Fri != adjacent Sat: we'll do a post-pass swap if needed.
+      const pick = pickBest(providers, dateStr, "fridays");
+      if (pick) assign(pick.email, dateStr, "fridays");
+    } else {
+      // Weekday: exclude whoever worked Sunday before a Monday
+      let exclude = [];
+      if (dow === 1) {
+        const sunDate = new Date(new Date(dateStr+"T00:00:00").getTime() - 86400000);
         const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
-        schedule[sunStr] = pick.email;
-        lastAssigned[pick.email] = sunStr;
-        monthCount[pick.email]["weekends"]++;
+        if (schedule[sunStr]) exclude = [schedule[sunStr]];
+      }
+      const pick = pickBest(providers, dateStr, "weekdays", exclude);
+      if (pick) assign(pick.email, dateStr, "weekdays");
+    }
+  }
+
+  // Post-pass: fix any Friday that shares a provider with the following Saturday
+  for (const { dateStr, dow } of allDays) {
+    if (dow !== 5) continue; // only Fridays
+    const satDate = new Date(new Date(dateStr+"T00:00:00").getTime() + 86400000);
+    const satStr = `${satDate.getFullYear()}-${String(satDate.getMonth()+1).padStart(2,"0")}-${String(satDate.getDate()).padStart(2,"0")}`;
+    if (schedule[dateStr] && schedule[satStr] && schedule[dateStr] === schedule[satStr]) {
+      // Conflict: reassign the Friday to someone else
+      const pick = pickBest(providers, dateStr, "fridays", [schedule[satStr]]);
+      if (pick) {
+        // Undo the old friday assignment from monthCount/hist
+        const oldEmail = schedule[dateStr];
+        hist[oldEmail]["fridays"]--;
+        hist[oldEmail]["total"]--;
+        monthCount[oldEmail]["fridays"]--;
+        assign(pick.email, dateStr, "fridays");
       }
     }
-  }
-
-  // 3. Fridays — must differ from adjacent Saturday (now already assigned above)
-  for (const friDate of fridays) {
-    const friD = parseInt(friDate.split("-")[2]);
-    const satDate = saturdays.find(s => parseInt(s.split("-")[2]) === friD + 1);
-    const satEmail = satDate ? schedule[satDate] : null;
-    const pick = pickBest(providers, friDate, "fridays", satEmail ? [satEmail] : []);
-    if (pick) assign(pick.email, friDate, "fridays");
   }
 
   // 4. Mirror Saturday → Sunday (handles same-month AND cross-month boundary)
