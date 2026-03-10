@@ -477,16 +477,7 @@ export function ProvidersPage({ onMessage, currentProvider }) {
                   {/* No-call days */}
                   {(p.no_call_days?.length || p.no_call_day != null) && (
                     <>
-                      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6}}>
-                        <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:12, color:C.text}}>No-Call Day Preferences</p>
-                        <button onClick={async () => {
-                          if (!window.confirm(`Clear all no-call day preferences for ${p.name}?`)) return;
-                          await clearNoCallDays(p.id);
-                          fetchProviders().then(setProviders);
-                        }} style={{ background:"none", border:"none", fontFamily:ffb, fontSize:11, color:C.coral, cursor:"pointer", padding:0 }}>
-                          Clear all
-                        </button>
-                      </div>
+                      <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:12, color:C.text}}>No-Call Day Preferences</p>
                       <div style={{display:"flex", flexDirection:"column", gap:4, marginBottom:12}}>
                         {(p.no_call_days?.length ? p.no_call_days : [p.no_call_day]).map((d, i) => (
                           <div key={d} style={{display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, background: i===0?C.wave:"#f9f9f9", border:`1px solid ${i===0?C.teal+"44":C.grey}`}}>
@@ -1100,7 +1091,8 @@ export function RequestPage({ currentProvider }) {
               </p>
               <button onClick={async () => {
                 if (!window.confirm("Request removal of your no-call day preferences? An admin will need to approve.")) return;
-                await submitNoCallDayRequest({ providerId: currentProvider.id, requestedDay: "Remove", rankedDays: null, notes: "Provider requested removal of all no-call day preferences." });
+                const { data, error } = await submitNoCallDayRequest({ providerId: currentProvider.id, requestedDay: "Remove", rankedDays: null, notes: "Provider requested removal of all no-call day preferences." });
+                if (error) { alert("Failed to submit: " + (error.message || JSON.stringify(error))); return; }
                 fetchNoCallDayRequests(currentProvider.id).then(setNoCallReqs);
                 const allProviders = await fetchProviders();
                 const adminIds = allProviders.filter(p => p.is_admin && !p.is_read_only).map(p => p.id);
