@@ -106,18 +106,8 @@ export default async function handler(req, res) {
     return dow === p.no_call_day;
   };
 
-  // isBlocked = hard block only
-  const isBlocked = (email, dateStr) => isHardBlocked(email, dateStr);
-
   const lastAssigned = {};
   for (const p of providers) lastAssigned[p.email] = hist[p.email].lastDate;
-
-  const gapOk = (email, dateStr, minGap = 4) => {
-    const last = lastAssigned[email];
-    if (!last) return true;
-    const diff = Math.floor((new Date(dateStr + "T00:00:00") - new Date(last + "T00:00:00")) / 86400000);
-    return diff > minGap;
-  };
 
   // Track how many of each category each provider has been assigned THIS month
   const monthCount = {};
@@ -261,7 +251,7 @@ export default async function handler(req, res) {
       .eq("date", prevSatStr)
       .single();
     const prevSatEmail = prevSatRow?.providers?.email;
-    if (prevSatEmail && !isBlocked(prevSatEmail, sunStr)) {
+    if (prevSatEmail && !isHardBlocked(prevSatEmail, sunStr)) {
       schedule[sunStr] = prevSatEmail;
       console.log(`[generate-schedule] Cross-month mirror: ${sunStr} (Sun) → ${prevSatEmail} from ${prevSatStr} (Sat)`);
     }
