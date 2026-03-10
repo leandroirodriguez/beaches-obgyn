@@ -2216,6 +2216,15 @@ function ScheduleEditor({ providers }) {
     } else {
       await lockMonth(yr, mo, "admin");
       setLockedMonths(prev => new Set([...prev, monthKey]));
+      // Notify all providers that the schedule is locked/final
+      const monthLabel = `${MONTHS[mo]} ${yr}`;
+      sendPushNotification({
+        providerIds: providers.map(p => p.id),
+        title: "Schedule Finalized 📅",
+        body: `The call schedule for ${monthLabel} has been finalized`,
+        data: { action: "home" },
+        notifKey: `locked-${yr}-${mo}`,
+      });
     }
     setLockSaving(false);
   };
@@ -3172,7 +3181,7 @@ export function NotificationsPage({ onBack, currentProvider, onNavigate }) {
 }
 
 export function SettingsPage({ onBack, onLogout, currentProvider, onProfileSaved }) {
-  const defaultPrefs = {all:true, published:true, changes:true, messages:true};
+  const defaultPrefs = {all:true, locked:true, changes:true, messages:true};
   const [faceId, setFaceId] = useState(true);
   const [notifs, setNotifs] = useState(defaultPrefs);
   const [showPwForm, setShowPwForm] = useState(false);
@@ -3217,7 +3226,7 @@ export function SettingsPage({ onBack, onLogout, currentProvider, onProfileSaved
     const updated = { ...notifs, [key]: val };
     // If "all" turned off, turn off everything
     if (key === "all" && !val) {
-      const allOff = { all: false, published: false, changes: false, messages: false };
+      const allOff = { all: false, locked: false, changes: false, messages: false };
       setNotifs(allOff);
       if (currentProvider) updateProviderPrefs(currentProvider.id, allOff);
       return;
@@ -3320,7 +3329,7 @@ export function SettingsPage({ onBack, onLogout, currentProvider, onProfileSaved
       </div>
       <div style={card({padding:"16px"})}>
         <p style={{margin:"0 0 14px", fontFamily:ff, fontWeight:800, fontSize:14, color:C.text}}>Notifications</p>
-        {[["all","All Notifications"],["published","Schedule Published"],["changes","Schedule Changes"],["messages","Messages"]].map(([k,l]) => (
+        {[["all","All Notifications"],["locked","Schedule Locked"],["changes","Schedule Changes"],["messages","Messages"]].map(([k,l]) => (
           <div key={k} style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14}}>
             <span style={{fontFamily:ff, fontWeight:700, fontSize:13, color:C.text}}>{l}</span>
             <Toggle val={notifs[k]} fn={v => handleToggleNotif(k, v)}/>
