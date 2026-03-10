@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs, updateProviderProfile, fetchScheduleLocks, lockMonth, unlockMonth, clearMonthSchedule } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs, updateProviderProfile, fetchScheduleLocks, lockMonth, unlockMonth, clearMonthSchedule, clearNoCallDays } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -477,7 +477,16 @@ export function ProvidersPage({ onMessage, currentProvider }) {
                   {/* No-call days */}
                   {(p.no_call_days?.length || p.no_call_day != null) && (
                     <>
-                      <p style={{margin:"0 0 6px", fontFamily:ff, fontWeight:800, fontSize:12, color:C.text}}>No-Call Day Preferences</p>
+                      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6}}>
+                        <p style={{margin:0, fontFamily:ff, fontWeight:800, fontSize:12, color:C.text}}>No-Call Day Preferences</p>
+                        <button onClick={async () => {
+                          if (!window.confirm(`Clear all no-call day preferences for ${p.name}?`)) return;
+                          await clearNoCallDays(p.id);
+                          fetchProviders().then(setProviders);
+                        }} style={{ background:"none", border:"none", fontFamily:ffb, fontSize:11, color:C.coral, cursor:"pointer", padding:0 }}>
+                          Clear all
+                        </button>
+                      </div>
                       <div style={{display:"flex", flexDirection:"column", gap:4, marginBottom:12}}>
                         {(p.no_call_days?.length ? p.no_call_days : [p.no_call_day]).map((d, i) => (
                           <div key={d} style={{display:"flex", alignItems:"center", gap:8, padding:"7px 10px", borderRadius:8, background: i===0?C.wave:"#f9f9f9", border:`1px solid ${i===0?C.teal+"44":C.grey}`}}>
@@ -1098,9 +1107,22 @@ export function RequestPage({ currentProvider }) {
         </div>
         {(currentProvider?.no_call_days?.length || currentProvider?.no_call_day != null) && (
           <div style={card({ padding: "12px 14px", marginBottom: 14, borderLeft: `3px solid #65b896` })}>
-            <p style={{ margin: "0 0 8px", fontFamily: ff, fontWeight: 700, fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: 1 }}>
-              Current No-Call Days (ranked)
-            </p>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+              <p style={{ margin: 0, fontFamily: ff, fontWeight: 700, fontSize: 11, color: C.sub, textTransform: "uppercase", letterSpacing: 1 }}>
+                Current No-Call Days (ranked)
+              </p>
+              <button onClick={async () => {
+                if (!window.confirm("Request removal of your no-call day preferences? An admin will need to approve.")) return;
+                const allProviders = await fetchProviders();
+                const adminIds = allProviders.filter(p => p.is_admin && !p.is_read_only).map(p => p.id);
+                sendPushNotification({ providerIds: adminIds, title: "No-Call Day Removal Request",
+                  body: `${currentProvider.name} has requested removal of their no-call day preferences`,
+                  data: { action: "admin-requests" }, notifKey: "changes" });
+                alert("Removal request sent to admin.");
+              }} style={{ background:"none", border:"none", fontFamily:ffb, fontSize:11, color:C.coral, cursor:"pointer", padding:0 }}>
+                Request removal
+              </button>
+            </div>
             {(currentProvider.no_call_days?.length ? currentProvider.no_call_days : [currentProvider.no_call_day]).map((d, i) => (
               <div key={d} style={{ display:"flex", alignItems:"center", gap:8, marginTop: i>0?6:0 }}>
                 <span style={{ fontFamily:ff, fontWeight:900, fontSize:13, color: i===0?C.teal:C.sub, minWidth:16 }}>{i+1}.</span>
@@ -1154,11 +1176,11 @@ export function RequestPage({ currentProvider }) {
                       opacity: dragIdx===i?0.5:1 }}>
                     <span style={{ fontSize:16, color:C.greyMid }}>☰</span>
                     <span style={{ fontFamily:ff, fontWeight:900, fontSize:13, color:i===0?C.teal:C.sub, minWidth:18 }}>{i+1}.</span>
-                    <span style={{ fontFamily:ff, fontWeight:800, fontSize:13, color:C.text, flex:1 }}>
+                    <span style={{ fontFamily:ff, fontWeight:800, fontSize:14, color:i===0?C.teal:C.text, flex:1 }}>
                       {["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][dayNum]}
                     </span>
-                    <span style={{ fontFamily:ffb, fontSize:11, color:C.sub }}>
-                      {i===0?"highest priority":"lower priority"}
+                    <span style={{ fontFamily:ffb, fontSize:11, color:i===0?C.teal:C.sub }}>
+                      {i===0?"← most important":"lower priority"}
                     </span>
                   </div>
                 ))}

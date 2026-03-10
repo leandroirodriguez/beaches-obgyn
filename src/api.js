@@ -340,3 +340,11 @@ export async function clearMonthSchedule(year, month) {
   if (error) console.error("clearMonthSchedule:", error);
   return !error;
 }
+
+export async function clearNoCallDays(providerId) {
+  const { error } = await supabase.from("providers")
+    .update({ no_call_days: null, no_call_day: null })
+    .eq("id", providerId);
+  if (error) console.error("clearNoCallDays:", error);
+  return !error;
+}
