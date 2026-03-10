@@ -99,8 +99,12 @@ export default async function handler(req, res) {
     return diff > minGap;
   };
 
+  // Track how many of each category each provider has been assigned THIS month
+  const monthCount = {};
+  for (const p of providers) monthCount[p.email] = { weekends: 0, fridays: 0, weekdays: 0 };
+
   // Pick best provider for a given date/category
-  // Priority: 1) never back-to-back, 2) fewest calls in this category, 3) longest rest
+  // Priority: 1) never back-to-back, 2) fewest assigned THIS month, 3) fewest all-time, 4) longest rest
   const pickBest = (candidates, dateStr, category, excludeEmails = []) => {
     const notBlocked = candidates.filter(p =>
       !excludeEmails.includes(p.email) && !isBlocked(p.email, dateStr)
@@ -113,7 +117,6 @@ export default async function handler(req, res) {
       return Math.floor((new Date(dateStr+"T00:00:00") - new Date(last+"T00:00:00")) / 86400000);
     };
 
-    // Sort: back-to-back is always last resort, then fewest category calls, then longest rest
     const sorted = notBlocked.slice().sort((a, b) => {
       const aGap = gap(a.email);
       const bGap = gap(b.email);
@@ -121,11 +124,14 @@ export default async function handler(req, res) {
       const bBackToBack = bGap <= 1;
       // Never pick back-to-back if anyone else is available
       if (aBackToBack !== bBackToBack) return aBackToBack ? 1 : -1;
-      // Fewest calls in this category
-      const catDiff = hist[a.email][category] - hist[b.email][category];
-      if (catDiff !== 0) return catDiff;
-      // Longest rest as tiebreaker
+      // Fewest assigned this category THIS month (strongest signal — prevents hoarding)
+      const monthDiff = monthCount[a.email][category] - monthCount[b.email][category];
+      if (monthDiff !== 0) return monthDiff;
+      // Longest rest as tiebreaker (gap fairness within month)
       return bGap - aGap;
+      // Note: all-time history is intentionally NOT used here — the generator is called
+      // with up-to-date history already baked into hist[], so month-level balance is
+      // the right signal. Year-round fairness comes from history fed back each month.
     });
 
     return sorted[0];
@@ -137,12 +143,29 @@ export default async function handler(req, res) {
     schedule[dateStr] = email;
     hist[email][category]++;
     hist[email].total++;
+    monthCount[email][category]++;
     lastAssigned[email] = dateStr;
   };
 
-  // 1. Saturdays + immediately mirror to Sunday
-  //    Mirror happens here (before Fridays/weekdays) so lastAssigned is correct
-  //    for gap checks in subsequent steps.
+  // 1. Weekdays first — assign before weekends so weekend assignments don't
+  //    poison gap scores for weekday picks (prevents providers with late-month
+  //    weekends from being shut out of early-month weekdays).
+  //    Monday exclusion of prior Sunday handled via schedule lookup.
+  for (const wdDate of weekdays) {
+    const d = new Date(wdDate + "T00:00:00");
+    const dow = d.getDay();
+    let excludeFromWeekend = [];
+    if (dow === 1) {
+      // Monday — exclude whoever worked Sunday (prior week's Saturday person)
+      const sunDate = new Date(d); sunDate.setDate(sunDate.getDate() - 1);
+      const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
+      if (schedule[sunStr]) excludeFromWeekend = [schedule[sunStr]];
+    }
+    const pick = pickBest(providers, wdDate, "weekdays", excludeFromWeekend);
+    if (pick) assign(pick.email, wdDate, "weekdays");
+  }
+
+  // 2. Saturdays + immediately mirror to Sunday
   const satAssignedThisMonth = {};
   for (const satDate of saturdays) {
     const noWeekendYet = providers.filter(p => !satAssignedThisMonth[p.email]);
@@ -151,38 +174,23 @@ export default async function handler(req, res) {
     if (pick) {
       assign(pick.email, satDate, "weekends");
       satAssignedThisMonth[pick.email] = (satAssignedThisMonth[pick.email] || 0) + 1;
-      // Mirror Saturday → Sunday immediately so lastAssigned reflects Sunday
       const sunDate = new Date(new Date(satDate+"T00:00:00").getTime() + 86400000);
       if (sunDate.getMonth() === month) {
         const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
         schedule[sunStr] = pick.email;
-        lastAssigned[pick.email] = sunStr; // critical: gap checks now see Sunday as last day
+        lastAssigned[pick.email] = sunStr;
+        monthCount[pick.email]["weekends"]++;
       }
     }
   }
 
-  // 2. Fridays — must differ from adjacent Saturday
+  // 3. Fridays — must differ from adjacent Saturday (now already assigned above)
   for (const friDate of fridays) {
     const friD = parseInt(friDate.split("-")[2]);
     const satDate = saturdays.find(s => parseInt(s.split("-")[2]) === friD + 1);
     const satEmail = satDate ? schedule[satDate] : null;
     const pick = pickBest(providers, friDate, "fridays", satEmail ? [satEmail] : []);
     if (pick) assign(pick.email, friDate, "fridays");
-  }
-
-  // 3. Weekdays — exclude whoever worked the immediately preceding weekend
-  for (const wdDate of weekdays) {
-    const d = new Date(wdDate + "T00:00:00");
-    const dow = d.getDay(); // 1=Mon, 2=Tue, 3=Wed, 4=Thu
-    let excludeFromWeekend = [];
-    if (dow === 1) {
-      // Monday — exclude whoever worked Sunday (= Saturday person)
-      const sunDate = new Date(d); sunDate.setDate(sunDate.getDate() - 1);
-      const sunStr = `${sunDate.getFullYear()}-${String(sunDate.getMonth()+1).padStart(2,"0")}-${String(sunDate.getDate()).padStart(2,"0")}`;
-      if (schedule[sunStr]) excludeFromWeekend = [schedule[sunStr]];
-    }
-    const pick = pickBest(providers, wdDate, "weekdays", excludeFromWeekend);
-    if (pick) assign(pick.email, wdDate, "weekdays");
   }
 
   // 4. Mirror Saturday → Sunday (handles same-month AND cross-month boundary)
