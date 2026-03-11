@@ -215,10 +215,11 @@ export async function updateScheduleDate(date, providerEmail) {
     .eq("email", providerEmail)
     .single();
   if (!provData) { console.error("updateScheduleDate: provider not found", providerEmail); return false; }
+  // Delete existing row for this date first, then insert fresh
+  await supabase.from("call_schedule").delete().eq("date", date);
   const { error } = await supabase
     .from("call_schedule")
-    .update({ provider_id: provData.id })
-    .eq("date", date);
+    .insert({ date, provider_id: provData.id });
   if (error) console.error("updateScheduleDate:", error);
   return !error;
 }
@@ -342,9 +343,17 @@ export async function clearMonthSchedule(year, month) {
 }
 
 export async function clearNoCallDays(providerId) {
-  const { error } = await supabase.from("providers")
-    .update({ no_call_days: null, no_call_day: null })
-    .eq("id", providerId);
-  if (error) console.error("clearNoCallDays:", error);
-  return !error;
+  try {
+    const res = await fetch("/api/admin-update-provider", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ providerId, updates: { no_call_days: null, no_call_day: null } }),
+    });
+    const data = await res.json();
+    if (!res.ok) console.error("clearNoCallDays:", data.error);
+    return res.ok;
+  } catch (err) {
+    console.error("clearNoCallDays:", err);
+    return false;
+  }
 }
