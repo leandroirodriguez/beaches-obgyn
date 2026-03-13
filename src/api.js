@@ -1,11 +1,11 @@
 import { supabase } from "./supabase";
-
+ 
 export async function fetchProviders() {
   const { data, error } = await supabase.from("providers").select("*").order("name");
   if (error) console.error("fetchProviders:", error);
   return data || [];
 }
-
+ 
 export async function fetchSchedule(year, month) {
   const start = `${year}-${String(month + 1).padStart(2, "0")}-01`;
   const lastDay = new Date(year, month + 1, 0).getDate();
@@ -19,7 +19,7 @@ export async function fetchSchedule(year, month) {
   (data || []).forEach(row => { schedule[row.date] = row.providers; });
   return schedule;
 }
-
+ 
 export async function fetchRequests(providerId = null) {
   let query = supabase
     .from("requests")
@@ -30,7 +30,7 @@ export async function fetchRequests(providerId = null) {
   if (error) console.error("fetchRequests:", error);
   return data || [];
 }
-
+ 
 export async function fetchIncomingSwitchRequests(providerId) {
   const { data, error } = await supabase
     .from("requests")
@@ -42,7 +42,7 @@ export async function fetchIncomingSwitchRequests(providerId) {
   if (error) console.error("fetchIncomingSwitchRequests:", error);
   return data || [];
 }
-
+ 
 export async function submitRequest({ providerId, type, startDate, endDate, notes, targetProviderId = null }) {
   const { data, error } = await supabase
     .from("requests")
@@ -59,19 +59,19 @@ export async function submitRequest({ providerId, type, startDate, endDate, note
   if (error) console.error("submitRequest:", error);
   return { data, error };
 }
-
+ 
 export async function updateRequestStatus(requestId, status) {
   const { error } = await supabase.from("requests").update({ status }).eq("id", requestId);
   if (error) console.error("updateRequestStatus:", error);
   return !error;
 }
-
+ 
 export async function cancelRequest(requestId) {
   const { error } = await supabase.from("requests").delete().eq("id", requestId);
   if (error) console.error("cancelRequest:", error);
   return !error;
 }
-
+ 
 export async function fetchMessages(userId, recipientId) {
   const { data, error } = await supabase.from("messages").select("*")
     .or(`and(sender_id.eq.${userId},recipient_id.eq.${recipientId}),and(sender_id.eq.${recipientId},recipient_id.eq.${userId})`)
@@ -79,19 +79,19 @@ export async function fetchMessages(userId, recipientId) {
   if (error) console.error("fetchMessages:", error);
   return data || [];
 }
-
+ 
 export async function sendMessage({ senderId, recipientId, text }) {
   const { data, error } = await supabase.from("messages").insert({ sender_id: senderId, recipient_id: recipientId, text }).select().single();
   if (error) console.error("sendMessage:", error);
   return { data, error };
 }
-
+ 
 export async function fetchCurrentProvider(email) {
   const { data, error } = await supabase.from("providers").select("*").eq("email", email).single();
   if (error) console.error("fetchCurrentProvider:", error);
   return data || null;
 }
-
+ 
 export async function generateSchedule({ providers, requests, year, month, previousSchedule }) {
   const response = await fetch("/api/generate-schedule", {
     method: "POST",
@@ -101,7 +101,7 @@ export async function generateSchedule({ providers, requests, year, month, previ
   if (!response.ok) throw new Error("Failed to generate schedule");
   return response.json();
 }
-
+ 
 export async function saveGeneratedSchedule(scheduleMap, providers, year, month) {
   const rows = Object.entries(scheduleMap).map(([date, email]) => {
     const provider = providers.find(p => p.email === email);
@@ -118,7 +118,7 @@ export async function saveGeneratedSchedule(scheduleMap, providers, year, month)
   else console.log("Saved successfully!");
   return !error;
 }
-
+ 
 export async function fetchNoCallDayRequests(providerId = null) {
   let query = supabase
     .from("no_call_day_requests")
@@ -129,7 +129,7 @@ export async function fetchNoCallDayRequests(providerId = null) {
   if (error) console.error("fetchNoCallDayRequests:", error);
   return data || [];
 }
-
+ 
 export async function submitNoCallDayRequest({ providerId, requestedDay, rankedDays, notes }) {
   // requestedDay = primary day (string), rankedDays = ordered array of day numbers
   const { data, error } = await supabase
@@ -139,7 +139,7 @@ export async function submitNoCallDayRequest({ providerId, requestedDay, rankedD
   if (error) console.error("submitNoCallDayRequest:", error);
   return { data, error };
 }
-
+ 
 export async function updateNoCallDayStatus(requestId, status, providerId, day, rankedDays = null) {
   const { error } = await supabase.from("no_call_day_requests").update({ status }).eq("id", requestId);
   if (error) { console.error("updateNoCallDayStatus:", error); return false; }
@@ -161,7 +161,7 @@ export async function updateNoCallDayStatus(requestId, status, providerId, day, 
   }
   return !error;
 }
-
+ 
 export async function uploadAvatar(providerId, file) {
   const ext = file.name.split(".").pop();
   const path = `avatars/${providerId}.${ext}`;
@@ -178,20 +178,20 @@ export async function uploadAvatar(providerId, file) {
   if (updateError) { console.error("updateAvatar:", updateError); return null; }
   return `${cleanUrl}?t=${Date.now()}`;
 }
-
+ 
 export async function executeCallSwitch(requestId, requesterProviderId, targetProviderId, requesterDate, targetDate) {
   const { error: e1 } = await supabase
     .from("call_schedule")
     .update({ provider_id: targetProviderId })
     .eq("date", requesterDate);
   if (e1) { console.error("executeCallSwitch e1:", e1); return false; }
-
+ 
   const { error: e2 } = await supabase
     .from("call_schedule")
     .update({ provider_id: requesterProviderId })
     .eq("date", targetDate);
   if (e2) { console.error("executeCallSwitch e2:", e2); return false; }
-
+ 
   for (const [date, providerId] of [[requesterDate, targetProviderId], [targetDate, requesterProviderId]]) {
     const d = new Date(date + "T00:00:00");
     if (d.getDay() === 6) {
@@ -201,13 +201,13 @@ export async function executeCallSwitch(requestId, requesterProviderId, targetPr
       await supabase.from("call_schedule").update({ provider_id: providerId }).eq("date", sunStr);
     }
   }
-
+ 
   const { error: e3 } = await supabase.from("requests").update({ status: "Approved" }).eq("id", requestId);
   if (e3) { console.error("executeCallSwitch e3:", e3); return false; }
-
+ 
   return true;
 }
-
+ 
 export async function updateScheduleDate(date, providerEmail) {
   const { data: provData } = await supabase
     .from("providers")
@@ -223,7 +223,7 @@ export async function updateScheduleDate(date, providerEmail) {
   if (error) console.error("updateScheduleDate:", error);
   return !error;
 }
-
+ 
 export async function fetchNotifications(providerId) {
   const { data, error } = await supabase
     .from("notifications")
@@ -234,7 +234,7 @@ export async function fetchNotifications(providerId) {
   if (error) console.error("fetchNotifications:", error);
   return data || [];
 }
-
+ 
 export async function markNotificationsRead(providerId) {
   const { error } = await supabase
     .from("notifications")
@@ -244,7 +244,7 @@ export async function markNotificationsRead(providerId) {
   if (error) console.error("markNotificationsRead:", error);
   return !error;
 }
-
+ 
 export async function createNotification({ providerId, title, body }) {
   const { error } = await supabase
     .from("notifications")
@@ -252,7 +252,7 @@ export async function createNotification({ providerId, title, body }) {
   if (error) console.error("createNotification:", error);
   return !error;
 }
-
+ 
 export async function updateProviderPrefs(providerId, prefs) {
   const { error } = await supabase
     .from("providers")
@@ -261,7 +261,7 @@ export async function updateProviderPrefs(providerId, prefs) {
   if (error) console.error("updateProviderPrefs:", error);
   return !error;
 }
-
+ 
 export async function updateProviderProfile(providerId, { full_name, phone, display_name, fl_license_exp, dea_license_exp }) {
   const { error } = await supabase
     .from("providers")
@@ -271,7 +271,7 @@ export async function updateProviderProfile(providerId, { full_name, phone, disp
   if (error) throw error;
   return true;
 }
-
+ 
 export async function registerPushSubscription(providerId, subscription) {
   const { endpoint, keys: { p256dh, auth } } = subscription.toJSON();
   const { error } = await supabase.from("push_subscriptions").upsert(
@@ -281,7 +281,7 @@ export async function registerPushSubscription(providerId, subscription) {
   if (error) console.error("registerPushSubscription:", error);
   return !error;
 }
-
+ 
 export async function sendPushNotification({ providerIds, title, body, data = {}, notifKey = null }) {
   try {
     let filteredIds = providerIds;
@@ -309,13 +309,13 @@ export async function sendPushNotification({ providerIds, title, body, data = {}
     console.error("sendPushNotification:", err);
   }
 }
-
+ 
 export async function fetchScheduleLocks() {
   const { data, error } = await supabase.from("schedule_locks").select("month");
   if (error) console.error("fetchScheduleLocks:", error);
   return new Set((data || []).map(r => r.month));
 }
-
+ 
 export async function lockMonth(year, month, email) {
   const key = `${year}-${String(month + 1).padStart(2, "0")}`;
   const { error } = await supabase.from("schedule_locks")
@@ -323,14 +323,14 @@ export async function lockMonth(year, month, email) {
   if (error) console.error("lockMonth:", error);
   return !error;
 }
-
+ 
 export async function unlockMonth(year, month) {
   const key = `${year}-${String(month + 1).padStart(2, "0")}`;
   const { error } = await supabase.from("schedule_locks").delete().eq("month", key);
   if (error) console.error("unlockMonth:", error);
   return !error;
 }
-
+ 
 export async function clearMonthSchedule(year, month) {
   const start = `${year}-${String(month + 1).padStart(2, "0")}-01`;
   const end = `${year}-${String(month + 1).padStart(2, "0")}-31`;
@@ -341,7 +341,7 @@ export async function clearMonthSchedule(year, month) {
   if (error) console.error("clearMonthSchedule:", error);
   return !error;
 }
-
+ 
 export async function clearNoCallDays(providerId) {
   try {
     const res = await fetch("/api/admin-update-provider", {
@@ -357,3 +357,72 @@ export async function clearNoCallDays(providerId) {
     return false;
   }
 }
+// ── Preferred On-Call Requests ─────────────────────────────────────────────
+ 
+export async function fetchPreferredCallRequests(providerId = null) {
+  let q = supabase
+    .from("preferred_call_requests")
+    .select("*, providers(id, name, color, initials, email, avatar_url)")
+    .order("call_date", { ascending: true });
+  if (providerId) q = q.eq("provider_id", providerId);
+  const { data, error } = await q;
+  if (error) console.error("fetchPreferredCallRequests:", error);
+  return data || [];
+}
+ 
+export async function submitPreferredCallRequest({ providerId, callDate, notes }) {
+  const d = new Date(callDate + "T12:00:00");
+  const dow = d.getDay(); // 0=Sun, 6=Sat
+  const rows = [{ provider_id: providerId, call_date: callDate, notes: notes || null }];
+ 
+  // Auto-pair the full weekend
+  if (dow === 6) {
+    const sun = new Date(d);
+    sun.setDate(sun.getDate() + 1);
+    rows.push({ provider_id: providerId, call_date: sun.toISOString().split("T")[0], notes: "(weekend pair)" });
+  } else if (dow === 0) {
+    const sat = new Date(d);
+    sat.setDate(sat.getDate() - 1);
+    rows.push({ provider_id: providerId, call_date: sat.toISOString().split("T")[0], notes: "(weekend pair)" });
+  }
+ 
+  const { data, error } = await supabase
+    .from("preferred_call_requests")
+    .insert(rows)
+    .select("*, providers(id, name, color, initials, email, avatar_url)");
+  if (error) console.error("submitPreferredCallRequest:", error);
+  return { data: data || [], error };
+}
+ 
+export async function deletePreferredCallRequest(id, callDate, providerId) {
+  const { error } = await supabase.from("preferred_call_requests").delete().eq("id", id);
+  if (error) { console.error("deletePreferredCallRequest:", error); return false; }
+ 
+  // Delete paired weekend day if applicable
+  if (callDate && providerId) {
+    const d = new Date(callDate + "T12:00:00");
+    const dow = d.getDay();
+    if (dow === 6 || dow === 0) {
+      const paired = new Date(d);
+      paired.setDate(paired.getDate() + (dow === 6 ? 1 : -1));
+      const pairedDate = paired.toISOString().split("T")[0];
+      await supabase
+        .from("preferred_call_requests")
+        .delete()
+        .eq("provider_id", providerId)
+        .eq("call_date", pairedDate)
+        .eq("status", "pending");
+    }
+  }
+  return true;
+}
+ 
+export async function skipPreferredCallRequest(id, skipReason = "") {
+  const { error } = await supabase
+    .from("preferred_call_requests")
+    .update({ status: "skipped", skip_reason: skipReason })
+    .eq("id", id);
+  if (error) console.error("skipPreferredCallRequest:", error);
+  return !error;
+}
+ 

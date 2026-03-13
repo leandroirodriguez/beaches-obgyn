@@ -4,7 +4,7 @@ import {
   ff, ffb, dkey, getDays, getFirst,
   card, btnS, oBtnS, inpS, lblS, badge
 } from "./data";
-import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs, updateProviderProfile, fetchScheduleLocks, lockMonth, unlockMonth, clearMonthSchedule, clearNoCallDays } from "./api";
+import { fetchSchedule, fetchProviders, fetchRequests, submitRequest, updateRequestStatus, fetchMessages, sendMessage, generateSchedule, saveGeneratedSchedule, cancelRequest, fetchNoCallDayRequests, submitNoCallDayRequest, updateNoCallDayStatus, fetchIncomingSwitchRequests, updateScheduleDate, uploadAvatar, fetchCurrentProvider, executeCallSwitch, sendPushNotification, fetchNotifications, markNotificationsRead, updateProviderPrefs, updateProviderProfile, fetchScheduleLocks, lockMonth, unlockMonth, clearMonthSchedule, clearNoCallDays, fetchPreferredCallRequests, submitPreferredCallRequest, deletePreferredCallRequest, skipPreferredCallRequest } from "./api";
 import { supabase } from "./supabase";
 
 export function IcoHome({color}) {
@@ -563,6 +563,13 @@ export function RequestPage({ currentProvider }) {
 
   const [incomingSwitch, setIncomingSwitch] = useState([]);
 
+  // ── Preferred On-Call state ──────────────────────────────────────
+  const [prefCallDate, setPrefCallDate]       = useState("");
+  const [prefCallNotes, setPrefCallNotes]     = useState("");
+  const [prefCallLoading, setPrefCallLoading] = useState(false);
+  const [prefCallDone, setPrefCallDone]       = useState(false);
+  const [prefCallReqs, setPrefCallReqs]       = useState([]);
+
   const DAYS = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
   useEffect(() => {
@@ -571,15 +578,68 @@ export function RequestPage({ currentProvider }) {
     fetchNoCallDayRequests(currentProvider.id).then(setNoCallReqs);
     fetchIncomingSwitchRequests(currentProvider.id).then(setIncomingSwitch);
     fetchProviders().then(setAllProviders);
+    fetchPreferredCallRequests(currentProvider.id).then(setPrefCallReqs);
   }, [currentProvider]);
 
   const adminIds = allProviders.filter(p => p.is_admin).map(p => p.id);
 
   const opts = [
-    ["Days Off",      "Completely unavailable"],
-    ["Off Call Only", "Available for clinic, no call"],
-    ["Call Switch",   "Swap with another provider"],
+    ["Days Off",        "Completely unavailable"],
+    ["Off Call Only",   "Available for clinic, no call"],
+    ["Call Switch",     "Swap with another provider"],
+    ["Preferred Call",  "Request a date you'd like to be on call"],
   ];
+
+  // ── Preferred call helpers ──────────────────────────────────────
+  const isWeekendDate = (dateStr) => {
+    if (!dateStr) return false;
+    const dow = new Date(dateStr + "T12:00:00").getDay();
+    return dow === 0 || dow === 6;
+  };
+
+  const formatPrefDate = (dateStr) => {
+    const d = new Date(dateStr + "T12:00:00");
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  };
+
+  const minPrefDate = () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split("T")[0];
+  };
+
+  const handlePrefCallSubmit = async () => {
+    if (!prefCallDate || !currentProvider) return;
+    setPrefCallLoading(true);
+    const { data, error } = await submitPreferredCallRequest({
+      providerId: currentProvider.id,
+      callDate: prefCallDate,
+      notes: prefCallNotes,
+    });
+    if (!error) {
+      setPrefCallReqs(prev => [...prev, ...data]);
+      setPrefCallDone(true);
+      setPrefCallDate("");
+      setPrefCallNotes("");
+      setTimeout(() => setPrefCallDone(false), 3000);
+    }
+    setPrefCallLoading(false);
+  };
+
+  const handleDeletePrefCall = async (id, callDate) => {
+    const ok = await deletePreferredCallRequest(id, callDate, currentProvider?.id);
+    if (ok) {
+      // Remove this row and its weekend pair from local state
+      const d = callDate ? new Date(callDate + "T12:00:00") : null;
+      const dow = d ? d.getDay() : -1;
+      let pairedDate = null;
+      if (dow === 6) { const s = new Date(d); s.setDate(s.getDate()+1); pairedDate = s.toISOString().split("T")[0]; }
+      if (dow === 0) { const s = new Date(d); s.setDate(s.getDate()-1); pairedDate = s.toISOString().split("T")[0]; }
+      setPrefCallReqs(prev => prev.filter(r =>
+        r.id !== id && !(r.call_date === pairedDate && r.status === "pending")
+      ));
+    }
+  };
 
   const handleSubmit = async () => {
     if (!start || !end || !currentProvider) return;
@@ -938,7 +998,98 @@ export function RequestPage({ currentProvider }) {
           </div>
         )}
 
-        {done
+        {/* ── Preferred On-Call Form ─────────────────────────────── */}
+        {type === "Preferred Call" && (
+          <div style={{ ...card(), padding: "14px", marginBottom: 14 }}>
+            <p style={{ margin: "0 0 4px", fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>
+              Request a Preferred On-Call Date
+            </p>
+            <p style={{ margin: "0 0 14px", fontFamily: ffb, fontSize: 11, color: C.sub, lineHeight: 1.5 }}>
+              The scheduler will try to honor this. If you select a weekend day, both Saturday & Sunday are requested as a pair. The 3-day rest gap is waived since you requested it.
+            </p>
+
+            <span style={lbl()}>Date</span>
+            <input
+              type="date"
+              value={prefCallDate}
+              min={minPrefDate()}
+              onChange={e => setPrefCallDate(e.target.value)}
+              style={{ ...inputSt, marginBottom: 12 }}
+            />
+
+            {isWeekendDate(prefCallDate) && (
+              <div style={{ marginBottom: 12, padding: "9px 12px", borderRadius: 8,
+                background: "#fff8e1", border: "1.5px solid #f0c040",
+                fontFamily: ffb, fontSize: 11, color: "#7a5c00" }}>
+                🌅 Weekend selected — <strong>both Saturday & Sunday</strong> will be requested as a pair.
+              </div>
+            )}
+
+            <span style={lbl()}>Notes (optional)</span>
+            <textarea
+              value={prefCallNotes}
+              onChange={e => setPrefCallNotes(e.target.value)}
+              placeholder="e.g. Spouse traveling, prefer to work that day…"
+              rows={2}
+              style={{ ...inputSt, resize: "none", marginBottom: 14, fontFamily: ffb }}
+            />
+
+            {prefCallDone
+              ? <div style={{ padding: 13, borderRadius: 8, textAlign: "center", background: C.wave, border: `1.5px solid ${C.teal}` }}>
+                  <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 14, color: C.teal }}>⭐ Preference Submitted!</span>
+                </div>
+              : <button
+                  style={btnS({ opacity: (!prefCallDate || prefCallLoading) ? 0.6 : 1 })}
+                  onClick={handlePrefCallSubmit}
+                  disabled={!prefCallDate || prefCallLoading}
+                >
+                  {prefCallLoading ? "Submitting…" : "Submit Preference"}
+                </button>
+            }
+          </div>
+        )}
+
+        {/* My Preferred On-Call Requests list */}
+        {type === "Preferred Call" && prefCallReqs.length > 0 && (
+          <div style={{ ...card(), padding: "14px", marginBottom: 14 }}>
+            <p style={{ margin: "0 0 12px", fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>
+              My Preferred On-Call Requests
+            </p>
+            {prefCallReqs.map((r, i) => {
+              const isPaired = r.notes === "(weekend pair)";
+              const statusColor = r.status === "honored" ? "#2a9d8f" : r.status === "skipped" ? C.coral : C.greyMid;
+              const statusLabel = r.status === "honored" ? "✅ Honored" : r.status === "skipped" ? "⛔ Skipped" : "⏳ Pending";
+              return (
+                <div key={r.id} style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 0",
+                  borderBottom: i < prefCallReqs.length - 1 ? `1px solid ${C.grey}` : "none",
+                }}>
+                  <span style={{ fontSize: 18 }}>{isWeekendDate(r.call_date) ? "🌅" : "📅"}</span>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ margin: 0, fontFamily: ff, fontWeight: 800, fontSize: 13, color: C.text }}>
+                      {formatPrefDate(r.call_date)}
+                      {isPaired && <span style={{ marginLeft: 6, fontFamily: ffb, fontSize: 10, color: C.sub }}>(weekend pair)</span>}
+                    </p>
+                    {r.notes && !isPaired && (
+                      <p style={{ margin: "2px 0 0", fontFamily: ffb, fontSize: 11, color: C.sub }}>{r.notes}</p>
+                    )}
+                    <p style={{ margin: "2px 0 0", fontFamily: ff, fontWeight: 700, fontSize: 11, color: statusColor }}>
+                      {statusLabel}{r.status === "skipped" && r.skip_reason ? ` — ${r.skip_reason}` : ""}
+                    </p>
+                  </div>
+                  {r.status === "pending" && (
+                    <button onClick={() => handleDeletePrefCall(r.id, r.call_date)}
+                      style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: C.greyMid, padding: "4px 8px" }}
+                      title="Remove">✕</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {type !== "Preferred Call" && (done
           ? <div style={{ padding: 13, borderRadius: 8, textAlign: "center", background: C.wave, border: `1.5px solid ${C.teal}` }}>
               <span style={{ fontFamily: ff, fontWeight: 900, fontSize: 14, color: C.teal }}>Request Submitted!</span>
             </div>
@@ -949,7 +1100,7 @@ export function RequestPage({ currentProvider }) {
             >
               {loading ? "Submitting..." : "Submit Request"}
             </button>
-        }
+        )}
       </>}
 
       {tab === "mine" && <>
@@ -1256,6 +1407,15 @@ export function IcoLicense({color}) {
       <path d="M5 18c0-2.2 1.8-4 4-4" stroke={color} strokeWidth={1.5} strokeLinecap="round"/>
       <line x1={13} y1={9} x2={19} y2={9} stroke={color} strokeWidth={1.5} strokeLinecap="round"/>
       <line x1={13} y1={13} x2={17} y2={13} stroke={color} strokeWidth={1.5} strokeLinecap="round"/>
+    </svg>
+  );
+}
+
+export function IcoStar({color}) {
+  return (
+    <svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"
+        stroke={color} strokeWidth={2} strokeLinejoin="round"/>
     </svg>
   );
 }
@@ -1706,6 +1866,7 @@ export function MorePage({ onNav, currentProvider }) {
     [IcoScale,"Call Fairness","fairness"],
     [IcoLicense,"License Expirations","licenses"],
     [IcoPrint,"Export Schedule PDF","print"],
+    ...(isAdmin ? [[IcoStar,"Preferred On-Call Requests","preferred-calls"]] : []),
     [IcoGear,"Settings","settings"],
   ].filter(([,,key]) => {
     if (isReadOnly && key === "admin") return false;
@@ -4098,6 +4259,187 @@ export function PrintCalendarView({ months, avatarMap, logoDataUrl, providers })
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ── Preferred On-Call Admin Page ─────────────────────────────────────────────
+export function PreferredCallAdminPage({ onBack }) {
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [skipModal, setSkipModal] = useState(null); // { id, callDate, pairedId, name }
+  const [skipReason, setSkipReason] = useState("");
+
+  useEffect(() => {
+    fetchPreferredCallRequests()
+      .then(data => setRequests(data.filter(r => r.status === "pending")))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const isWeekend = (dateStr) => {
+    if (!dateStr) return false;
+    const dow = new Date(dateStr + "T12:00:00").getDay();
+    return dow === 0 || dow === 6;
+  };
+
+  const fmtDate = (dateStr) => new Date(dateStr + "T12:00:00").toLocaleDateString("en-US", {
+    weekday: "short", month: "short", day: "numeric", year: "numeric"
+  });
+
+  const handleSkip = async () => {
+    if (!skipModal) return;
+    await skipPreferredCallRequest(skipModal.id, skipReason);
+    // Also skip weekend pair if it exists
+    if (skipModal.pairedId) {
+      await skipPreferredCallRequest(skipModal.pairedId, "(weekend pair skipped)");
+    }
+    setRequests(prev => prev.filter(r => r.id !== skipModal.id && r.id !== skipModal.pairedId));
+    setSkipModal(null);
+    setSkipReason("");
+  };
+
+  // Find paired weekend row for a given row
+  const findPaired = (r) => {
+    if (!isWeekend(r.call_date)) return null;
+    const d = new Date(r.call_date + "T12:00:00");
+    const dow = d.getDay();
+    const paired = new Date(d);
+    paired.setDate(paired.getDate() + (dow === 6 ? 1 : -1));
+    const pairedDate = paired.toISOString().split("T")[0];
+    return requests.find(x => x.provider_id === r.provider_id && x.call_date === pairedDate);
+  };
+
+  // Group by month
+  const grouped = requests.reduce((acc, r) => {
+    const key = r.call_date.slice(0, 7);
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(r);
+    return acc;
+  }, {});
+
+  const monthLabel = (key) => {
+    const [y, m] = key.split("-");
+    return new Date(+y, +m - 1, 1).toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  };
+
+  const hdr = {
+    position: "sticky", top: 0, zIndex: 10,
+    background: C.surface, padding: "14px 16px 10px",
+    borderBottom: `1px solid ${C.grey}`,
+    display: "flex", alignItems: "center", gap: 12,
+  };
+
+  return (
+    <div style={{ paddingBottom: 80 }}>
+      <div style={hdr}>
+        <button onClick={onBack} style={{ background:"none", border:"none", cursor:"pointer", fontSize:22, color:C.teal, lineHeight:1 }}>‹</button>
+        <div>
+          <p style={{ margin:0, fontFamily:ff, fontWeight:900, fontSize:16, color:C.text }}>⭐ Preferred On-Call Requests</p>
+          <p style={{ margin:"2px 0 0", fontFamily:ffb, fontSize:11, color:C.sub }}>Pending provider preferences for upcoming months</p>
+        </div>
+      </div>
+
+      <div style={{ padding: "14px 16px" }}>
+        {loading && <p style={{ fontFamily:ffb, fontSize:13, color:C.sub, textAlign:"center", marginTop:32 }}>Loading…</p>}
+
+        {!loading && requests.length === 0 && (
+          <div style={{ textAlign:"center", marginTop:48, color:C.sub }}>
+            <div style={{ fontSize:36, marginBottom:10 }}>⭐</div>
+            <p style={{ fontFamily:ffb, fontSize:13 }}>No pending preferred on-call requests.</p>
+          </div>
+        )}
+
+        {!loading && Object.keys(grouped).sort().map(monthKey => (
+          <div key={monthKey} style={{ marginBottom:24 }}>
+            <p style={{ margin:"0 0 10px", fontFamily:ff, fontWeight:800, fontSize:11,
+              textTransform:"uppercase", letterSpacing:1, color:C.teal }}>
+              {monthLabel(monthKey)}
+            </p>
+
+            {grouped[monthKey].map(r => {
+              const isPaired = r.notes === "(weekend pair)";
+              const paired = findPaired(r);
+              return (
+                <div key={r.id} style={{
+                  ...card({ padding:"12px 14px", marginBottom:10 }),
+                  display:"flex", alignItems:"flex-start", gap:12,
+                }}>
+                  <Avatar p={r.providers} size={38} ring />
+                  <div style={{ flex:1 }}>
+                    <p style={{ margin:0, fontFamily:ff, fontWeight:800, fontSize:14, color:C.text }}>
+                      {r.providers?.name}
+                    </p>
+                    <p style={{ margin:"3px 0 0", fontFamily:ff, fontWeight:700, fontSize:13, color:C.teal }}>
+                      {isWeekend(r.call_date) ? "🌅 " : "📅 "}
+                      {fmtDate(r.call_date)}
+                      {isPaired && <span style={{ marginLeft:8, fontFamily:ffb, fontSize:10, color:C.sub, fontWeight:400 }}>weekend pair</span>}
+                    </p>
+                    {r.notes && !isPaired && (
+                      <p style={{ margin:"4px 0 0", fontFamily:ffb, fontSize:11, color:C.sub }}>"{r.notes}"</p>
+                    )}
+                    <p style={{ margin:"4px 0 0", fontFamily:ffb, fontSize:10, color:C.sub }}>
+                      Submitted {new Date(r.created_at).toLocaleDateString("en-US", { month:"short", day:"numeric" })}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSkipModal({ id:r.id, callDate:r.call_date, pairedId:paired?.id, name:r.providers?.name })}
+                    style={{
+                      border:`1.5px solid ${C.coral}`, background:"none", color:C.coral,
+                      borderRadius:8, padding:"6px 12px", fontSize:11,
+                      fontFamily:ff, fontWeight:800, cursor:"pointer", flexShrink:0,
+                    }}
+                  >
+                    Skip
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Skip confirmation modal */}
+      {skipModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)",
+          display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:100 }}>
+          <div style={{ background:C.surface, borderRadius:"20px 20px 0 0",
+            padding:"20px 20px 36px", width:"100%", maxWidth:480 }}>
+            <p style={{ margin:"0 0 4px", fontFamily:ff, fontWeight:900, fontSize:16, color:C.text }}>
+              Skip This Preference?
+            </p>
+            <p style={{ margin:"0 0 14px", fontFamily:ffb, fontSize:13, color:C.sub }}>
+              {skipModal.name} — {fmtDate(skipModal.callDate)}
+              {skipModal.pairedId ? " (weekend pair will also be skipped)" : ""}
+            </p>
+            <p style={{ margin:"0 0 6px", fontFamily:ff, fontWeight:700, fontSize:12, color:C.text }}>
+              Reason (optional — provider will see this)
+            </p>
+            <textarea
+              value={skipReason}
+              onChange={e => setSkipReason(e.target.value)}
+              placeholder="e.g. Fairness constraint, coverage gap…"
+              rows={2}
+              style={{ width:"100%", borderRadius:8, border:`1.5px solid ${C.grey}`,
+                padding:"10px 12px", fontSize:13, resize:"none",
+                fontFamily:ffb, marginBottom:14, boxSizing:"border-box" }}
+            />
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={() => { setSkipModal(null); setSkipReason(""); }}
+                style={{ flex:1, padding:13, borderRadius:10, border:`1.5px solid ${C.grey}`,
+                  background:"none", fontFamily:ff, fontWeight:800, fontSize:14, cursor:"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={handleSkip}
+                style={{ flex:1, padding:13, borderRadius:10, border:"none",
+                  background:C.coral, color:"#fff",
+                  fontFamily:ff, fontWeight:800, fontSize:14, cursor:"pointer" }}>
+                Skip Preference
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

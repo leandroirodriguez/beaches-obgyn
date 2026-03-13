@@ -19,6 +19,7 @@ import {
   CallLogicPage,
   PrintSchedulePage,
   LicensesPage,
+  PreferredCallAdminPage,
 } from "./components";
 
 const NAV = [
@@ -260,11 +261,12 @@ function AppInner() {
   function renderBody() {
     if (sub === "messages")      return <MessagesPage recipient={msgRecip} onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
     if (sub === "admin")         return <AdminPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
-    if (sub === "fairness")      return <FairnessPage onBack={()=>setSub(null)}/>;
-    if (sub === "vacations")     return <UpcomingVacationsPage onBack={()=>setSub(null)}/>;
-    if (sub === "logic")         return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
-    if (sub === "print")         return <PrintSchedulePage onBack={()=>setSub(null)}/>;
-    if (sub === "licenses")      return <LicensesPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (sub === "fairness")         return <FairnessPage onBack={()=>setSub(null)}/>;
+    if (sub === "vacations")        return <UpcomingVacationsPage onBack={()=>setSub(null)}/>;
+    if (sub === "logic")            return <CallLogicPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (sub === "print")            return <PrintSchedulePage onBack={()=>setSub(null)}/>;
+    if (sub === "licenses")         return <LicensesPage onBack={()=>setSub(null)} currentProvider={currentProvider}/>;
+    if (sub === "preferred-calls")  return <PreferredCallAdminPage onBack={()=>setSub(null)}/>;
     if (sub === "settings")      return <SettingsPage onBack={()=>setSub(null)} onLogout={handleLogout} currentProvider={currentProvider} onProfileSaved={() => fetchCurrentProvider(session.user.email).then(setCurrentProvider)}/>;
     if (sub === "notifications") return <NotificationsPage onBack={()=>setSub(null)} currentProvider={currentProvider} onNavigate={handleNotifNavigate}/>;
     if (tab === "home")      return <HomePage currentProvider={currentProvider}/>;
