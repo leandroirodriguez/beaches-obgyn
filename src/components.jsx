@@ -1008,13 +1008,13 @@ export function RequestPage({ currentProvider }) {
               The scheduler will try to honor this. If you select a weekend day, both Saturday & Sunday are requested as a pair. The 3-day rest gap is waived since you requested it.
             </p>
 
-            <span style={lbl()}>Date</span>
+            <span style={lblS}>Date</span>
             <input
               type="date"
               value={prefCallDate}
               min={minPrefDate()}
               onChange={e => setPrefCallDate(e.target.value)}
-              style={{ ...inputSt, marginBottom: 12 }}
+              style={{ ...inpS, marginBottom: 12 }}
             />
 
             {isWeekendDate(prefCallDate) && (
@@ -1025,13 +1025,13 @@ export function RequestPage({ currentProvider }) {
               </div>
             )}
 
-            <span style={lbl()}>Notes (optional)</span>
+            <span style={lblS}>Notes (optional)</span>
             <textarea
               value={prefCallNotes}
               onChange={e => setPrefCallNotes(e.target.value)}
               placeholder="e.g. Spouse traveling, prefer to work that day…"
               rows={2}
-              style={{ ...inputSt, resize: "none", marginBottom: 14, fontFamily: ffb }}
+              style={{ ...inpS, resize: "none", marginBottom: 14, fontFamily: ffb }}
             />
 
             {prefCallDone
