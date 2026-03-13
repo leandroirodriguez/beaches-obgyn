@@ -1029,7 +1029,7 @@ export function RequestPage({ currentProvider }) {
             <textarea
               value={prefCallNotes}
               onChange={e => setPrefCallNotes(e.target.value)}
-              placeholder="e.g. Spouse traveling, prefer to work that day…"
+              placeholder="e.g. To offset prior vacation request…"
               rows={2}
               style={{ ...inpS, resize: "none", marginBottom: 14, fontFamily: ffb }}
             />
