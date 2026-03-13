@@ -829,7 +829,7 @@ export function RequestPage({ currentProvider }) {
         ))}
 
         {/* Days Off / Off Call Only — date range pickers */}
-        {type !== "Call Switch" && (
+        {type !== "Call Switch" && type !== "Preferred Call" && (
           <div style={card({ padding: "14px", marginBottom: 12, display: "flex", gap: 10, alignItems: "center" })}>
             <div style={{ flex: 1 }}>
               <span style={lblS}>Start</span>
