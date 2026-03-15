@@ -4331,7 +4331,7 @@ export function PreferredCallAdminPage({ onBack }) {
   };
 
   return (
-    <div style={{ paddingBottom: 80 }}>
+    <div style={{ paddingBottom: "calc(80px + env(safe-area-inset-bottom))" }}>
       <div style={hdr}>
         <button onClick={onBack} style={{ background:"none", border:"none", cursor:"pointer", fontSize:22, color:C.teal, lineHeight:1 }}>‹</button>
         <div>

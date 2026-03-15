@@ -281,7 +281,7 @@ function AppInner() {
       <div style={{flex:1, padding:"16px 16px 0", overflowY:"auto"}}>
         {renderBody()}
       </div>
-      <nav style={{display:"flex", borderTop:`1px solid ${C.grey}`, background:"#fff", position:"sticky", bottom:0, zIndex:10, flexShrink:0}}>
+      <nav style={{display:"flex", borderTop:`1px solid ${C.grey}`, background:"#fff", position:"sticky", bottom:0, zIndex:10, flexShrink:0, paddingBottom:"env(safe-area-inset-bottom)"}}>
         {NAV.filter(([key]) => !(currentProvider?.is_read_only && key === "request")).map(([key, label, Icon]) => {
           const active = tab === key && !sub;
           return (
